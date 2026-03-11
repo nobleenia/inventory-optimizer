@@ -1,15 +1,17 @@
 // Inventory Optimizer — main entry point.
 //
-// Usage:
+// Modes:
 //
-//	inventory-optimizer \
-//	  -sales   data/sales_history.csv \
-//	  -params  data/sku_parameters.csv \
-//	  -output  output/report.csv
+//	CLI mode (default):
+//	  inventory-optimizer -sales data/sales_history.csv -params data/sku_parameters.csv
+//
+//	Web mode:
+//	  inventory-optimizer -web
+//	  inventory-optimizer -web -port :3000
 //
 // The program loads CSV inputs, computes demand statistics, derives
 // optimal inventory policies, runs Monte-Carlo simulations, and
-// presents the results on the terminal and (optionally) in a CSV file.
+// presents the results either on the terminal or in a web browser.
 package main
 
 import (
@@ -19,28 +21,24 @@ import (
 	"os"
 	"time"
 
-	"github.com/noble-ch/inventory-optimizer/internal/demand"
-	"github.com/noble-ch/inventory-optimizer/internal/inventory"
+	"github.com/noble-ch/inventory-optimizer/internal/engine"
 	"github.com/noble-ch/inventory-optimizer/internal/models"
-	"github.com/noble-ch/inventory-optimizer/internal/parser"
 	"github.com/noble-ch/inventory-optimizer/internal/reporting"
-	"github.com/noble-ch/inventory-optimizer/internal/simulation"
+	"github.com/noble-ch/inventory-optimizer/internal/web"
 )
 
 func main() {
 	// ── CLI flags ──────────────────────────────────────────────────────
+	webMode := flag.Bool("web", false,
+		"Start the web server instead of running CLI analysis")
+	port := flag.String("port", ":8080",
+		"Port for the web server (used with -web)")
 	salesPath := flag.String("sales", "data/sales_history.csv",
 		"Path to weekly sales history CSV")
 	paramsPath := flag.String("params", "data/sku_parameters.csv",
 		"Path to SKU parameters CSV")
 	outputPath := flag.String("output", "",
 		"Path for CSV export (optional; leave blank to skip)")
-	serviceLevel := flag.Float64("service-level", inventory.DefaultServiceLevel,
-		"Target service level (0.90, 0.95, or 0.99)")
-	simRuns := flag.Int("sim-runs", simulation.DefaultRuns,
-		"Number of Monte-Carlo simulation runs per SKU")
-	simWeeks := flag.Int("sim-weeks", simulation.DefaultWeeks,
-		"Simulation horizon in weeks")
 	showVersion := flag.Bool("version", false, "Print version and exit")
 	flag.Parse()
 
@@ -49,116 +47,50 @@ func main() {
 		os.Exit(0)
 	}
 
+	if *webMode {
+		runWeb(*port)
+	} else {
+		runCLI(*salesPath, *paramsPath, *outputPath)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Web mode
+// ---------------------------------------------------------------------------
+
+func runWeb(port string) {
+	server := web.NewServer(port)
+	if err := server.Start(); err != nil {
+		log.Fatalf("Server error: %v\n", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// CLI mode
+// ---------------------------------------------------------------------------
+
+func runCLI(salesPath, paramsPath, outputPath string) {
 	start := time.Now()
+	opts := engine.DefaultOptions()
 
-	// ── Phase 1: Data Ingestion ───────────────────────────────────────
-	log.Println("Loading sales history …")
-	sales, errs := parser.LoadSalesHistory(*salesPath)
-	reportParseErrors("sales history", errs)
-	log.Printf("  → %d sales records loaded.\n", len(sales))
-
-	log.Println("Loading SKU parameters …")
-	paramSlice, errs := parser.LoadSKUParameters(*paramsPath)
-	reportParseErrors("SKU parameters", errs)
-	log.Printf("  → %d SKUs configured.\n", len(paramSlice))
-
-	// Index parameters by SKU for O(1) lookup.
-	paramsMap := make(map[string]models.SKUParameters, len(paramSlice))
-	for _, p := range paramSlice {
-		paramsMap[p.SKU] = p
-	}
-
-	// ── Phase 2: Demand Analysis ──────────────────────────────────────
-	log.Println("Analysing demand …")
-	demandStats, err := demand.Analyze(sales, paramsMap)
+	log.Println("Loading data and running analysis …")
+	reports, warnings, err := engine.RunFromFiles(salesPath, paramsPath, opts)
 	if err != nil {
-		log.Fatalf("Demand analysis failed: %v\n", err)
+		log.Fatalf("Analysis failed: %v\n", err)
 	}
 
-	// Index demand stats by SKU.
-	statsMap := make(map[string]models.DemandStats, len(demandStats))
-	for _, d := range demandStats {
-		statsMap[d.SKU] = d
+	for _, w := range warnings {
+		log.Printf("  ⚠  %s\n", w)
 	}
-
-	// ── Phase 3: Inventory Optimisation ───────────────────────────────
-	log.Println("Computing inventory policies …")
-	policies := make(map[string]models.InventoryPolicy, len(paramSlice))
-	for _, p := range paramSlice {
-		stats, ok := statsMap[p.SKU]
-		if !ok {
-			log.Fatalf("No demand data for SKU %s\n", p.SKU)
-		}
-		pol, err := inventory.ComputePolicy(stats, p, *serviceLevel)
-		if err != nil {
-			log.Fatalf("Policy computation failed for %s: %v\n", p.SKU, err)
-		}
-		policies[p.SKU] = pol
-	}
-
-	// ── Phase 4: Monte-Carlo Simulation ───────────────────────────────
-	log.Println("Running simulations …")
-	simResults := make(map[string]models.SimulationResult, len(paramSlice))
-	for _, p := range paramSlice {
-		stats := statsMap[p.SKU]
-		pol := policies[p.SKU]
-		cfg := simulation.Config{
-			Runs:  *simRuns,
-			Weeks: *simWeeks,
-			Seed:  time.Now().UnixNano(),
-		}
-		simResults[p.SKU] = simulation.Run(p, stats, pol, cfg)
-	}
-
-	// ── Phase 5: Reporting ────────────────────────────────────────────
-	reports := assembleReports(paramSlice, statsMap, policies, simResults)
 
 	reporting.PrintCLI(os.Stdout, reports)
 
-	if *outputPath != "" {
-		if err := reporting.ExportCSV(*outputPath, reports); err != nil {
+	if outputPath != "" {
+		if err := reporting.ExportCSV(outputPath, reports); err != nil {
 			log.Fatalf("CSV export failed: %v\n", err)
 		}
-		log.Printf("CSV report saved to %s\n", *outputPath)
+		log.Printf("CSV report saved to %s\n", outputPath)
 	}
 
 	log.Printf("Done in %s.\n", time.Since(start).Round(time.Millisecond))
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-// assembleReports builds a sorted slice of SKUReport in the same order
-// as the parameters file (preserves the user's SKU ordering).
-func assembleReports(
-	paramSlice []models.SKUParameters,
-	stats map[string]models.DemandStats,
-	policies map[string]models.InventoryPolicy,
-	simResults map[string]models.SimulationResult,
-) []models.SKUReport {
-	reports := make([]models.SKUReport, 0, len(paramSlice))
-	for _, p := range paramSlice {
-		reports = append(reports, models.SKUReport{
-			Parameters: p,
-			Demand:     stats[p.SKU],
-			Policy:     policies[p.SKU],
-			Simulation: simResults[p.SKU],
-		})
-	}
-	return reports
-}
-
-// reportParseErrors logs non-fatal parse warnings and aborts if the
-// error count exceeds 10 (likely a bad file).
-func reportParseErrors(label string, errs []error) {
-	if len(errs) == 0 {
-		return
-	}
-	for _, e := range errs {
-		log.Printf("  ⚠  %s: %v\n", label, e)
-	}
-	if len(errs) > 10 {
-		log.Fatalf("Too many errors in %s (%d) — aborting.\n", label, len(errs))
-	}
 }

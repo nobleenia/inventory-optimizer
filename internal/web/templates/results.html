@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analysis Results · Inventory Optimizer</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1><a href="/" class="header-link">📦 Inventory Optimizer</a></h1>
+            <p class="subtitle">Analysis Report</p>
+        </div>
+    </header>
+
+    <main class="container">
+        {{if .Warnings}}
+        <div class="alert alert-warning">
+            <strong>⚠️ Warnings ({{len .Warnings}}):</strong>
+            <ul>
+                {{range .Warnings}}<li>{{.}}</li>{{end}}
+            </ul>
+        </div>
+        {{end}}
+
+        <div class="report-header">
+            <div class="report-meta">
+                <span class="meta-item">📦 <strong>{{.SKUCount}}</strong> SKUs analysed</span>
+                <span class="meta-item">⏱ Completed in <strong>{{.Elapsed}}</strong></span>
+                <span class="meta-item">🎯 Service level: <strong>95%</strong></span>
+            </div>
+            <div class="report-actions">
+                <a href="/download/csv?path={{.CSVPath}}" class="btn-secondary">⬇ Download CSV</a>
+                <a href="/" class="btn-outline">← New Analysis</a>
+            </div>
+        </div>
+
+        {{range .Reports}}
+        <section class="sku-card">
+            <div class="sku-header">
+                <h2>{{.Parameters.SKU}}</h2>
+                <div class="sku-badges">
+                    <span class="badge">{{.Parameters.CurrentInventory}} units on hand</span>
+                    <span class="badge">{{.Parameters.LeadTimeDays}}-day lead time</span>
+                </div>
+            </div>
+
+            <div class="metrics-grid">
+                <!-- Policy recommendations -->
+                <div class="metric-card metric-primary">
+                    <div class="metric-label">Reorder Point</div>
+                    <div class="metric-value">{{ceil .Policy.ReorderPoint | fixed0}} <small>units</small></div>
+                    <div class="metric-help">Order when stock drops to this level</div>
+                </div>
+                <div class="metric-card metric-primary">
+                    <div class="metric-label">Order Quantity (EOQ)</div>
+                    <div class="metric-value">{{ceil .Policy.EOQ | fixed0}} <small>units</small></div>
+                    <div class="metric-help">Optimal number of units per order</div>
+                </div>
+                <div class="metric-card metric-primary">
+                    <div class="metric-label">Safety Stock</div>
+                    <div class="metric-value">{{ceil .Policy.SafetyStock | fixed0}} <small>units</small></div>
+                    <div class="metric-help">Buffer to protect against demand spikes</div>
+                </div>
+
+                <!-- Demand stats -->
+                <div class="metric-card">
+                    <div class="metric-label">Weekly Demand (avg)</div>
+                    <div class="metric-value">{{fixed1 .Demand.WeeklyMean}} <small>units/wk</small></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Demand Variability</div>
+                    <div class="metric-value">±{{fixed1 .Demand.WeeklyStdDev}} <small>units/wk</small></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Annual Demand</div>
+                    <div class="metric-value">{{fixed0 .Demand.AnnualDemand}} <small>units/yr</small></div>
+                </div>
+
+                <!-- Simulation -->
+                <div class="metric-card">
+                    <div class="metric-label">Expected Stockouts</div>
+                    <div class="metric-value">{{fixed1 .Simulation.AvgStockouts}} <small>/year</small></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Stockout Risk</div>
+                    <div class="metric-value">{{pct .Simulation.StockoutProbability}}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Avg Inventory</div>
+                    <div class="metric-value">{{fixed0 .Simulation.AvgInventoryLevel}} <small>units</small></div>
+                </div>
+
+                <!-- Costs -->
+                <div class="metric-card metric-cost">
+                    <div class="metric-label">Holding Cost</div>
+                    <div class="metric-value">{{currency .Simulation.AvgAnnualHoldingCost}}</div>
+                    <div class="metric-help">Annual cost of keeping stock</div>
+                </div>
+                <div class="metric-card metric-cost">
+                    <div class="metric-label">Ordering Cost</div>
+                    <div class="metric-value">{{currency .Simulation.AvgAnnualOrderCost}}</div>
+                    <div class="metric-help">Annual cost of placing orders</div>
+                </div>
+                <div class="metric-card metric-cost metric-total">
+                    <div class="metric-label">Total Annual Cost</div>
+                    <div class="metric-value">{{currency .Simulation.AvgTotalAnnualCost}}</div>
+                    <div class="metric-help">Combined inventory cost estimate</div>
+                </div>
+            </div>
+
+            <!-- Plain-English recommendation -->
+            <div class="recommendation">
+                <h4>💡 What This Means</h4>
+                <p>
+                    For <strong>{{.Parameters.SKU}}</strong>, you should place an order of
+                    <strong>{{ceil .Policy.EOQ | fixed0}} units</strong> whenever your stock drops to
+                    <strong>{{ceil .Policy.ReorderPoint | fixed0}} units</strong>.
+                    Keep at least <strong>{{ceil .Policy.SafetyStock | fixed0}} units</strong>
+                    as a safety buffer.
+                    {{if le .Simulation.AvgStockouts 0.5}}
+                    With this policy, stockouts are <em>very unlikely</em> ({{fixed1 .Simulation.AvgStockouts}} expected per year).
+                    {{else}}
+                    With this policy, you may experience approximately <strong>{{fixed1 .Simulation.AvgStockouts}} stockout events</strong> per year.
+                    {{end}}
+                    The estimated total inventory cost is <strong>{{currency .Simulation.AvgTotalAnnualCost}}</strong> per year.
+                </p>
+            </div>
+        </section>
+        {{end}}
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>Inventory Optimizer v{{.Version}} · Analysis based on 500 Monte-Carlo simulations per SKU</p>
+        </div>
+    </footer>
+</body>
+</html>

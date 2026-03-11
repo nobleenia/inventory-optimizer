@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Error · Inventory Optimizer</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1><a href="/" class="header-link">📦 Inventory Optimizer</a></h1>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="error-card">
+            <h2>⚠️ Something Went Wrong</h2>
+            <p class="error-message">{{.Message}}</p>
+            <p class="error-help">
+                Please check that your CSV files match the expected format and try again.
+                Column headers must match exactly.
+            </p>
+            <a href="/" class="btn-primary">← Back to Upload</a>
+        </div>
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>Inventory Optimizer · Need help? Check the file format examples on the home page.</p>
+        </div>
+    </footer>
+</body>
+</html>

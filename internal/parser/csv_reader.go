@@ -24,20 +24,24 @@ import (
 // Public API
 // ---------------------------------------------------------------------------
 
-// LoadSalesHistory reads and validates sales_history.csv, returning one
-// SalesRecord per valid row. Rows that fail validation are collected into
-// the returned error slice so the caller can decide whether to continue.
+// LoadSalesHistory reads and validates a sales history CSV file at the
+// given path. Rows that fail validation are collected into the returned
+// error slice so the caller can decide whether to continue.
 func LoadSalesHistory(path string) ([]models.SalesRecord, []error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, []error{fmt.Errorf("cannot open sales history file: %w", err)}
 	}
 	defer f.Close()
+	return LoadSalesHistoryFromReader(f)
+}
 
-	reader := csv.NewReader(f)
+// LoadSalesHistoryFromReader parses sales history CSV data from any
+// io.Reader (file, HTTP upload body, etc.).
+func LoadSalesHistoryFromReader(r io.Reader) ([]models.SalesRecord, []error) {
+	reader := csv.NewReader(r)
 	reader.TrimLeadingSpace = true
 
-	// Read and validate header
 	header, err := reader.Read()
 	if err != nil {
 		return nil, []error{fmt.Errorf("cannot read header row: %w", err)}
@@ -49,7 +53,7 @@ func LoadSalesHistory(path string) ([]models.SalesRecord, []error) {
 	var (
 		records []models.SalesRecord
 		errs    []error
-		row     int = 1 // 1-indexed for human-friendly messages (header = row 1)
+		row     int = 1
 	)
 
 	for {
@@ -74,16 +78,20 @@ func LoadSalesHistory(path string) ([]models.SalesRecord, []error) {
 	return records, errs
 }
 
-// LoadSKUParameters reads and validates sku_parameters.csv, returning one
-// SKUParameters per valid row.
+// LoadSKUParameters reads and validates a SKU parameters CSV file.
 func LoadSKUParameters(path string) ([]models.SKUParameters, []error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, []error{fmt.Errorf("cannot open SKU parameters file: %w", err)}
 	}
 	defer f.Close()
+	return LoadSKUParametersFromReader(f)
+}
 
-	reader := csv.NewReader(f)
+// LoadSKUParametersFromReader parses SKU parameters CSV data from any
+// io.Reader.
+func LoadSKUParametersFromReader(r io.Reader) ([]models.SKUParameters, []error) {
+	reader := csv.NewReader(r)
 	reader.TrimLeadingSpace = true
 
 	header, err := reader.Read()

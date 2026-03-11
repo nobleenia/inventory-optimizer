@@ -156,7 +156,7 @@ func runWeb(port string) {
 			log.Printf("Database connection failed: %v", err)
 			log.Println("Starting web server in guest-only mode (no auth, no saved reports).")
 		} else {
-			authSvc = auth.NewService(auth.DefaultConfig(jwtSecret))
+			authSvc = auth.NewService(auth.WebConfig(jwtSecret))
 			log.Println("Database connected — auth and saved reports enabled.")
 		}
 	} else {

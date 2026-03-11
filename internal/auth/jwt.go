@@ -26,13 +26,23 @@ type Config struct {
 	RefreshTokenTTL time.Duration // lifetime of refresh tokens
 }
 
-// DefaultConfig returns sensible defaults (secret must still be set).
+// DefaultConfig returns sensible defaults for the REST API (short-lived access tokens).
 func DefaultConfig(secret string) Config {
 	return Config{
 		Secret:          secret,
 		Issuer:          "inventory-optimizer",
 		AccessTokenTTL:  15 * time.Minute,
 		RefreshTokenTTL: 7 * 24 * time.Hour,
+	}
+}
+
+// WebConfig returns config suitable for browser sessions (longer-lived access tokens).
+func WebConfig(secret string) Config {
+	return Config{
+		Secret:          secret,
+		Issuer:          "inventory-optimizer",
+		AccessTokenTTL:  7 * 24 * time.Hour, // browser cookie session
+		RefreshTokenTTL: 30 * 24 * time.Hour,
 	}
 }
 

@@ -1,0 +1,4 @@
+sku,current_inventory,lead_time_days,unit_cost,order_cost,holding_cost_rate
+SKU001,120,21,8.50,40.00,0.25
+SKU002,80,14,12.00,35.00,0.20
+SKU003,200,28,5.75,50.00,0.30

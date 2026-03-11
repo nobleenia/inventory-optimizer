@@ -113,8 +113,13 @@ func ExportCSV(path string, reports []models.SKUReport) error {
 		return fmt.Errorf("cannot create output file: %w", err)
 	}
 	defer f.Close()
+	return WriteCSV(f, reports)
+}
 
-	w := csv.NewWriter(f)
+// WriteCSV writes all SKU reports as CSV to an io.Writer.
+// This is used by both ExportCSV (file) and the API (in-memory buffer).
+func WriteCSV(dest io.Writer, reports []models.SKUReport) error {
+	w := csv.NewWriter(dest)
 	defer w.Flush()
 
 	header := []string{

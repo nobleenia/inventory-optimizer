@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inventory Optimizer — Smart Reorder Decisions</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <header>
+        <div class="container header-bar">
+            <a href="/" class="header-link"><h1>📦 Inventory Optimizer</h1></a>
+            <nav class="header-nav">
+                <a href="/upload" class="btn-header">Get Started</a>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <!-- Hero -->
+        <section class="hero">
+            <div class="container hero-inner">
+                <h2>Stop guessing.<br>Start optimising your inventory.</h2>
+                <p class="hero-sub">
+                    Upload your sales history and product data. In seconds, get clear
+                    reorder recommendations backed by Monte-Carlo simulation — no
+                    spreadsheets, no formulas, no guesswork.
+                </p>
+                <a href="/upload" class="btn-primary btn-hero">Analyse My Inventory</a>
+                <p class="hero-note">Free to use · No sign-up required · Your data stays on your machine</p>
+            </div>
+        </section>
+
+        <!-- Problem -->
+        <section class="section-light">
+            <div class="container">
+                <h3 class="section-title">The problem every seller faces</h3>
+                <div class="problem-grid">
+                    <div class="problem-card">
+                        <span class="problem-icon">📉</span>
+                        <h4>Stockouts</h4>
+                        <p>Running out of best-sellers means lost revenue and lower marketplace rankings.</p>
+                    </div>
+                    <div class="problem-card">
+                        <span class="problem-icon">📦</span>
+                        <h4>Overstock</h4>
+                        <p>Too much inventory ties up cash and racks up storage fees month after month.</p>
+                    </div>
+                    <div class="problem-card">
+                        <span class="problem-icon">🤷</span>
+                        <h4>Gut-feel reordering</h4>
+                        <p>"Order when it looks low" ignores demand variability, lead times, and cost trade-offs.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- What you get -->
+        <section class="section-white">
+            <div class="container">
+                <h3 class="section-title">What you get for each SKU</h3>
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <div class="feature-number">1</div>
+                        <h4>Reorder Point</h4>
+                        <p>The exact inventory level at which you should place your next order.</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-number">2</div>
+                        <h4>Order Quantity (EOQ)</h4>
+                        <p>The optimal number of units per order, balancing ordering and holding costs.</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-number">3</div>
+                        <h4>Safety Stock</h4>
+                        <p>Buffer inventory that protects you against demand variability during lead time.</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-number">4</div>
+                        <h4>Expected Stockouts</h4>
+                        <p>How many stockout events to expect per year with the recommended policy.</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-number">5</div>
+                        <h4>Annual Cost Estimate</h4>
+                        <p>Projected holding and ordering costs so you can see the financial impact.</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-number">6</div>
+                        <h4>Plain-English Advice</h4>
+                        <p>A clear recommendation you can act on — no statistics degree required.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- How it works -->
+        <section class="section-light">
+            <div class="container">
+                <h3 class="section-title">How it works</h3>
+                <div class="steps-grid">
+                    <div class="step-card">
+                        <div class="step-number">1</div>
+                        <h4>Upload two CSV files</h4>
+                        <p>Your weekly sales history and a table of product parameters (lead time, costs, current stock).</p>
+                    </div>
+                    <div class="step-card">
+                        <div class="step-number">2</div>
+                        <h4>Engine crunches the numbers</h4>
+                        <p>Demand analysis, safety stock, EOQ, and 500 Monte-Carlo simulation runs per SKU — in seconds.</p>
+                    </div>
+                    <div class="step-card">
+                        <div class="step-number">3</div>
+                        <h4>Review &amp; download</h4>
+                        <p>See per-SKU report cards with actionable advice. Export everything as CSV for your spreadsheet.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Who is this for -->
+        <section class="section-white">
+            <div class="container">
+                <h3 class="section-title">Built for e-commerce sellers</h3>
+                <p class="section-sub">
+                    Whether you sell on Shopify, Amazon, WooCommerce, or your own site —
+                    if you manage inventory and want to stop relying on gut feel,
+                    this tool is for you.
+                </p>
+                <div class="audience-grid">
+                    <div class="audience-item">🛍️ Shopify stores</div>
+                    <div class="audience-item">📦 Amazon FBA sellers</div>
+                    <div class="audience-item">🛒 WooCommerce shops</div>
+                    <div class="audience-item">🏷️ Independent brands</div>
+                    <div class="audience-item">💼 20–500 SKUs</div>
+                    <div class="audience-item">💰 €20K–€500K annual sales</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- CTA -->
+        <section class="section-cta">
+            <div class="container cta-inner">
+                <h3>Ready to optimise?</h3>
+                <p>Upload your data and get actionable inventory recommendations in under 10 seconds.</p>
+                <a href="/upload" class="btn-primary btn-hero">Get Started — It's Free</a>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>Inventory Optimizer v{{.Version}} · Built for e-commerce sellers</p>
+        </div>
+    </footer>
+</body>
+</html>

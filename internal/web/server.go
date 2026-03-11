@@ -54,7 +54,8 @@ func NewServer(addr string) *Server {
 	)
 
 	// Routes.
-	s.mux.HandleFunc("/", s.handleIndex)
+	s.mux.HandleFunc("/", s.handleLanding)
+	s.mux.HandleFunc("/upload", s.handleUpload)
 	s.mux.HandleFunc("/analyze", s.handleAnalyze)
 	s.mux.HandleFunc("/download/csv", s.handleDownloadCSV)
 	s.mux.Handle("/static/", http.FileServer(http.FS(content)))
@@ -73,12 +74,19 @@ func (s *Server) Start() error {
 // Handlers
 // ---------------------------------------------------------------------------
 
-// handleIndex renders the upload form.
-func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
+// handleLanding renders the landing / home page.
+func (s *Server) handleLanding(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
 		return
 	}
+	s.render(w, "landing.html", map[string]interface{}{
+		"Version": models.Version,
+	})
+}
+
+// handleUpload renders the CSV upload form.
+func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	s.render(w, "index.html", map[string]interface{}{
 		"Version": models.Version,
 	})
@@ -87,7 +95,7 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 // handleAnalyze processes uploaded CSVs and renders the results page.
 func (s *Server) handleAnalyze(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Redirect(w, r, "/", http.StatusSeeOther)
+		http.Redirect(w, r, "/upload", http.StatusSeeOther)
 		return
 	}
 

@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inventory Optimizer</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>📦 Inventory Optimizer</h1>
+            <p class="subtitle">Smart reorder decisions for your e-commerce business</p>
+        </div>
+    </header>
+
+    <main class="container">
+        <section class="upload-section">
+            <h2>Upload Your Data</h2>
+            <p class="help-text">
+                Upload two CSV files from your sales records. The engine will analyse your
+                demand patterns, compute optimal reorder policies, and simulate inventory
+                performance over the next year.
+            </p>
+
+            <form action="/analyze" method="POST" enctype="multipart/form-data" id="upload-form">
+                <div class="file-inputs">
+                    <div class="file-group">
+                        <label for="sales_file">
+                            <span class="file-icon">📊</span>
+                            <strong>Sales History</strong>
+                            <span class="file-desc">Weekly sales data per SKU</span>
+                        </label>
+                        <input type="file" id="sales_file" name="sales_file" accept=".csv" required>
+                        <div class="file-name" id="sales-name">No file chosen</div>
+                    </div>
+
+                    <div class="file-group">
+                        <label for="params_file">
+                            <span class="file-icon">⚙️</span>
+                            <strong>SKU Parameters</strong>
+                            <span class="file-desc">Cost, lead time &amp; inventory levels</span>
+                        </label>
+                        <input type="file" id="params_file" name="params_file" accept=".csv" required>
+                        <div class="file-name" id="params-name">No file chosen</div>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn-primary" id="submit-btn">
+                    <span class="btn-text">Run Analysis</span>
+                    <span class="btn-loading" style="display:none;">Analysing…</span>
+                </button>
+            </form>
+        </section>
+
+        <section class="format-section">
+            <h3>Expected File Formats</h3>
+            <div class="format-grid">
+                <div class="format-card">
+                    <h4>📊 sales_history.csv</h4>
+                    <table class="format-table">
+                        <thead><tr><th>sku</th><th>week</th><th>units_sold</th></tr></thead>
+                        <tbody>
+                            <tr><td>SKU001</td><td>2024-01-01</td><td>12</td></tr>
+                            <tr><td>SKU001</td><td>2024-01-08</td><td>15</td></tr>
+                        </tbody>
+                    </table>
+                    <p class="format-note">One row per SKU per week. Dates as YYYY-MM-DD.</p>
+                </div>
+                <div class="format-card">
+                    <h4>⚙️ sku_parameters.csv</h4>
+                    <table class="format-table">
+                        <thead><tr><th>sku</th><th>current_inventory</th><th>lead_time_days</th><th>unit_cost</th><th>order_cost</th><th>holding_cost_rate</th></tr></thead>
+                        <tbody>
+                            <tr><td>SKU001</td><td>120</td><td>21</td><td>8.50</td><td>40.00</td><td>0.25</td></tr>
+                        </tbody>
+                    </table>
+                    <p class="format-note">One row per SKU. Holding cost rate as decimal (0.25 = 25%).</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>Inventory Optimizer v{{.Version}} · Built for e-commerce sellers</p>
+        </div>
+    </footer>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

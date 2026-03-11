@@ -6,7 +6,7 @@ package models
 import "time"
 
 // Version is the semantic version of the engine, set at build time.
-const Version = "0.4.0"
+const Version = "0.5.0"
 
 // ---------------------------------------------------------------------------
 // Input layer — raw data ingested from CSV files

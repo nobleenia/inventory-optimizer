@@ -1,0 +1,21 @@
+{{define "nav"}}
+<header>
+    <div class="container header-bar">
+        <a href="/" class="header-link"><h1>📦 Inventory Optimizer</h1></a>
+        <nav class="header-nav">
+            {{if .IsLoggedIn}}
+                <span class="nav-user">{{.UserEmail}}</span>
+                <a href="/reports" class="btn-header">My Reports</a>
+                <a href="/upload" class="btn-header">New Analysis</a>
+                <a href="/logout" class="btn-header btn-outline-header">Logout</a>
+            {{else if .HasAuth}}
+                <a href="/upload" class="btn-header">Try Free</a>
+                <a href="/login" class="btn-header">Login</a>
+                <a href="/register" class="btn-header btn-primary-sm">Sign Up</a>
+            {{else}}
+                <a href="/upload" class="btn-header">Get Started</a>
+            {{end}}
+        </nav>
+    </div>
+</header>
+{{end}}

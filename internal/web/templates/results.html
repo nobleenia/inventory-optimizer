@@ -8,14 +8,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 </head>
 <body>
-    <header>
-        <div class="container header-bar">
-            <a href="/" class="header-link"><h1>📦 Inventory Optimizer</h1></a>
-            <nav class="header-nav">
-                <a href="/upload" class="btn-header">New Analysis</a>
-            </nav>
-        </div>
-    </header>
+    {{template "nav" .}}
 
     <main class="container">
         {{if .Warnings}}
@@ -27,6 +20,20 @@
         </div>
         {{end}}
 
+        {{if .IsGuest}}
+        <div class="alert alert-info">
+            <strong>👋 Guest preview</strong> — You're seeing a limited view.
+            <a href="/register">Create a free account</a> to unlock full analysis for all SKUs,
+            download PDF/CSV reports, and save your analyses.
+        </div>
+        {{end}}
+
+        {{if .SavedReportID}}
+        <div class="alert alert-success">
+            ✅ Report saved! <a href="/reports">View all saved reports</a>
+        </div>
+        {{end}}
+
         <div class="report-header">
             <div class="report-meta">
                 <span class="meta-item">📦 <strong>{{.SKUCount}}</strong> SKUs analysed</span>
@@ -34,14 +41,19 @@
                 <span class="meta-item">🎯 Service level: <strong>95%</strong></span>
             </div>
             <div class="report-actions">
+                {{if not .IsGuest}}
                 <a href="/download/csv?path={{.CSVPath}}" class="btn-secondary">⬇ CSV</a>
                 <a href="/download/pdf?path={{.PDFPath}}" class="btn-secondary">⬇ PDF</a>
+                {{else}}
+                <span class="btn-secondary btn-disabled" title="Sign up to download">🔒 CSV</span>
+                <span class="btn-secondary btn-disabled" title="Sign up to download">🔒 PDF</span>
+                {{end}}
                 <a href="/upload" class="btn-outline">← New Analysis</a>
             </div>
         </div>
 
         <!-- ── SKU Comparison Chart ─────────────────────────────────── -->
-        {{if gt .SKUCount 1}}
+        {{if and (gt .SKUCount 1) (not .IsGuest)}}
         <section class="chart-section">
             <h3 class="chart-title">SKU Cost Comparison</h3>
             <div class="chart-wrapper chart-wrapper-wide">
@@ -50,114 +62,147 @@
         </section>
         {{end}}
 
+        {{$isGuest := .IsGuest}}
+        {{$maxFree := .MaxGuestSKUs}}
         {{$idx := 0}}
-        {{range .Reports}}
-        <!-- ── SKU Card ──────────────────────────────────────────────── -->
+        {{range $i, $r := .Reports}}
+
+        {{if and $isGuest (ge $i $maxFree)}}
+        <!-- Locked SKU card for guests -->
+        <section class="sku-card sku-card-locked">
+            <div class="sku-header">
+                <h2>{{$r.Parameters.SKU}}</h2>
+                <div class="sku-badges">
+                    <span class="badge">{{$r.Parameters.CurrentInventory}} units on hand</span>
+                    <span class="badge">{{$r.Parameters.LeadTimeDays}}-day lead time</span>
+                </div>
+            </div>
+            <div class="locked-overlay">
+                <div class="locked-content">
+                    <span class="locked-icon">🔒</span>
+                    <h3>Full analysis locked</h3>
+                    <p>This SKU has {{fixed0 $r.Demand.AnnualDemand}} annual demand.
+                       Sign up to see the complete breakdown, charts, and recommendations.</p>
+                    <a href="/register" class="btn-primary" style="width:auto; padding:0.65rem 1.75rem;">
+                        Unlock Full Report — Free
+                    </a>
+                </div>
+            </div>
+        </section>
+        {{else}}
+        <!-- ── Full SKU Card ──────────────────────────────────────── -->
         <section class="sku-card">
             <div class="sku-header">
-                <h2>{{.Parameters.SKU}}</h2>
+                <h2>{{$r.Parameters.SKU}}</h2>
                 <div class="sku-badges">
-                    <span class="badge">{{.Parameters.CurrentInventory}} units on hand</span>
-                    <span class="badge">{{.Parameters.LeadTimeDays}}-day lead time</span>
-                    <span class="badge badge-trend badge-{{.Forecast.TrendLabel}}">📈 {{.Forecast.TrendLabel}}</span>
-                    <span class="badge badge-var badge-{{.Forecast.SeasonalityFlag}}">📊 {{.Forecast.SeasonalityFlag}}</span>
+                    <span class="badge">{{$r.Parameters.CurrentInventory}} units on hand</span>
+                    <span class="badge">{{$r.Parameters.LeadTimeDays}}-day lead time</span>
+                    <span class="badge badge-trend badge-{{$r.Forecast.TrendLabel}}">📈 {{$r.Forecast.TrendLabel}}</span>
+                    <span class="badge badge-var badge-{{$r.Forecast.SeasonalityFlag}}">📊 {{$r.Forecast.SeasonalityFlag}}</span>
                 </div>
             </div>
 
             <div class="metrics-grid">
-                <!-- Policy recommendations -->
                 <div class="metric-card metric-primary">
                     <div class="metric-label">Reorder Point</div>
-                    <div class="metric-value">{{ceil .Policy.ReorderPoint | fixed0}} <small>units</small></div>
+                    <div class="metric-value">{{ceil $r.Policy.ReorderPoint | fixed0}} <small>units</small></div>
                     <div class="metric-help">Order when stock drops to this level</div>
                 </div>
                 <div class="metric-card metric-primary">
                     <div class="metric-label">Order Quantity (EOQ)</div>
-                    <div class="metric-value">{{ceil .Policy.EOQ | fixed0}} <small>units</small></div>
+                    <div class="metric-value">{{ceil $r.Policy.EOQ | fixed0}} <small>units</small></div>
                     <div class="metric-help">Optimal number of units per order</div>
                 </div>
                 <div class="metric-card metric-primary">
                     <div class="metric-label">Safety Stock</div>
-                    <div class="metric-value">{{ceil .Policy.SafetyStock | fixed0}} <small>units</small></div>
+                    <div class="metric-value">{{ceil $r.Policy.SafetyStock | fixed0}} <small>units</small></div>
                     <div class="metric-help">Buffer to protect against demand spikes</div>
                 </div>
 
-                <!-- Demand stats -->
                 <div class="metric-card">
                     <div class="metric-label">Weekly Demand (avg)</div>
-                    <div class="metric-value">{{fixed1 .Demand.WeeklyMean}} <small>units/wk</small></div>
+                    <div class="metric-value">{{fixed1 $r.Demand.WeeklyMean}} <small>units/wk</small></div>
                 </div>
                 <div class="metric-card">
                     <div class="metric-label">Demand Variability</div>
-                    <div class="metric-value">±{{fixed1 .Demand.WeeklyStdDev}} <small>units/wk</small></div>
+                    <div class="metric-value">±{{fixed1 $r.Demand.WeeklyStdDev}} <small>units/wk</small></div>
                 </div>
                 <div class="metric-card">
                     <div class="metric-label">Annual Demand</div>
-                    <div class="metric-value">{{fixed0 .Demand.AnnualDemand}} <small>units/yr</small></div>
+                    <div class="metric-value">{{fixed0 $r.Demand.AnnualDemand}} <small>units/yr</small></div>
                 </div>
 
-                <!-- Simulation -->
                 <div class="metric-card">
                     <div class="metric-label">Expected Stockouts</div>
-                    <div class="metric-value">{{fixed1 .Simulation.AvgStockouts}} <small>/year</small></div>
+                    <div class="metric-value">{{fixed1 $r.Simulation.AvgStockouts}} <small>/year</small></div>
                 </div>
                 <div class="metric-card">
                     <div class="metric-label">Stockout Risk</div>
-                    <div class="metric-value">{{pct .Simulation.StockoutProbability}}</div>
+                    <div class="metric-value">{{pct $r.Simulation.StockoutProbability}}</div>
                 </div>
                 <div class="metric-card">
                     <div class="metric-label">Avg Inventory</div>
-                    <div class="metric-value">{{fixed0 .Simulation.AvgInventoryLevel}} <small>units</small></div>
+                    <div class="metric-value">{{fixed0 $r.Simulation.AvgInventoryLevel}} <small>units</small></div>
                 </div>
 
-                <!-- Costs -->
                 <div class="metric-card metric-cost">
                     <div class="metric-label">Holding Cost</div>
-                    <div class="metric-value">{{currency .Simulation.AvgAnnualHoldingCost}}</div>
+                    <div class="metric-value">{{currency $r.Simulation.AvgAnnualHoldingCost}}</div>
                     <div class="metric-help">Annual cost of keeping stock</div>
                 </div>
                 <div class="metric-card metric-cost">
                     <div class="metric-label">Ordering Cost</div>
-                    <div class="metric-value">{{currency .Simulation.AvgAnnualOrderCost}}</div>
+                    <div class="metric-value">{{currency $r.Simulation.AvgAnnualOrderCost}}</div>
                     <div class="metric-help">Annual cost of placing orders</div>
                 </div>
                 <div class="metric-card metric-cost metric-total">
                     <div class="metric-label">Total Annual Cost</div>
-                    <div class="metric-value">{{currency .Simulation.AvgTotalAnnualCost}}</div>
+                    <div class="metric-value">{{currency $r.Simulation.AvgTotalAnnualCost}}</div>
                     <div class="metric-help">Combined inventory cost estimate</div>
                 </div>
             </div>
 
-            <!-- Charts row: demand trend + cost breakdown -->
             <div class="chart-row">
                 <div class="chart-wrapper">
                     <h4 class="chart-title">Demand Trend &amp; Forecast</h4>
-                    <canvas id="demand-chart-{{.Parameters.SKU}}"></canvas>
+                    <canvas id="demand-chart-{{$r.Parameters.SKU}}"></canvas>
                 </div>
                 <div class="chart-wrapper chart-wrapper-sm">
                     <h4 class="chart-title">Cost Breakdown</h4>
-                    <canvas id="cost-chart-{{.Parameters.SKU}}"></canvas>
+                    <canvas id="cost-chart-{{$r.Parameters.SKU}}"></canvas>
                 </div>
             </div>
 
-            <!-- Plain-English recommendation -->
             <div class="recommendation">
                 <h4>💡 What This Means</h4>
                 <p>
-                    For <strong>{{.Parameters.SKU}}</strong>, you should place an order of
-                    <strong>{{ceil .Policy.EOQ | fixed0}} units</strong> whenever your stock drops to
-                    <strong>{{ceil .Policy.ReorderPoint | fixed0}} units</strong>.
-                    Keep at least <strong>{{ceil .Policy.SafetyStock | fixed0}} units</strong>
+                    For <strong>{{$r.Parameters.SKU}}</strong>, you should place an order of
+                    <strong>{{ceil $r.Policy.EOQ | fixed0}} units</strong> whenever your stock drops to
+                    <strong>{{ceil $r.Policy.ReorderPoint | fixed0}} units</strong>.
+                    Keep at least <strong>{{ceil $r.Policy.SafetyStock | fixed0}} units</strong>
                     as a safety buffer.
-                    {{if le .Simulation.AvgStockouts 0.5}}
-                    With this policy, stockouts are <em>very unlikely</em> ({{fixed1 .Simulation.AvgStockouts}} expected per year).
+                    {{if le $r.Simulation.AvgStockouts 0.5}}
+                    With this policy, stockouts are <em>very unlikely</em> ({{fixed1 $r.Simulation.AvgStockouts}} expected per year).
                     {{else}}
-                    With this policy, you may experience approximately <strong>{{fixed1 .Simulation.AvgStockouts}} stockout events</strong> per year.
+                    With this policy, you may experience approximately <strong>{{fixed1 $r.Simulation.AvgStockouts}} stockout events</strong> per year.
                     {{end}}
-                    The estimated total inventory cost is <strong>{{currency .Simulation.AvgTotalAnnualCost}}</strong> per year.
-                    Demand trend is <strong>{{.Forecast.TrendLabel}}</strong> and
-                    variability is <strong>{{.Forecast.SeasonalityFlag}}</strong>.
+                    The estimated total inventory cost is <strong>{{currency $r.Simulation.AvgTotalAnnualCost}}</strong> per year.
+                    Demand trend is <strong>{{$r.Forecast.TrendLabel}}</strong> and
+                    variability is <strong>{{$r.Forecast.SeasonalityFlag}}</strong>.
                 </p>
+            </div>
+        </section>
+        {{end}}
+        {{end}}
+
+        {{if .IsGuest}}
+        <section class="cta-card">
+            <h3>🚀 Get the complete picture</h3>
+            <p>Create a free account to see full analysis for all {{.SKUCount}} SKUs, interact with
+               charts, download PDF &amp; CSV reports, and save your analyses for later.</p>
+            <div class="cta-buttons">
+                <a href="/register" class="btn-primary" style="width:auto; padding:0.75rem 2rem;">Create Free Account</a>
+                <a href="/login" class="btn-outline" style="padding:0.75rem 2rem;">Already have an account?</a>
             </div>
         </section>
         {{end}}
@@ -172,6 +217,8 @@
     <script>
     (function() {
         var reports = {{json .Reports}};
+        var isGuest = {{json .IsGuest}};
+        var maxFree = {{json .MaxGuestSKUs}};
         var colors = {
             primary: '#2563eb',
             accent: '#059669',
@@ -182,7 +229,9 @@
             ordering: '#3b82f6'
         };
 
-        reports.forEach(function(r) {
+        reports.forEach(function(r, idx) {
+            if (isGuest && idx >= maxFree) return; // skip locked SKUs
+
             // ── Demand trend chart ─────────────────────────────────
             var sales = r.Forecast.WeeklySales || [];
             var sma = r.Forecast.SMA || [];
@@ -191,19 +240,16 @@
             var nHist = sales.length;
             var nFcast = fcastSES.length;
 
-            // Build labels: Week 1..N, then F1..F8
             var labels = [];
             for (var i = 1; i <= nHist; i++) labels.push('W' + i);
             for (var i = 1; i <= nFcast; i++) labels.push('F' + i);
 
-            // Pad SMA to align with the end of historical data
             var smaOffset = nHist - sma.length;
             var smaPadded = new Array(smaOffset).fill(null).concat(sma).concat(new Array(nFcast).fill(null));
             var sesPadded = ses.concat(new Array(nFcast).fill(null));
             var salesPadded = sales.concat(new Array(nFcast).fill(null));
             var fcastPadded = new Array(nHist).fill(null);
-            // Connect forecast to last SES value
-            fcastPadded[nHist - 1] = ses[ses.length - 1];
+            if (ses.length > 0) fcastPadded[nHist - 1] = ses[ses.length - 1];
             fcastPadded = fcastPadded.concat(fcastSES);
 
             var dCtx = document.getElementById('demand-chart-' + r.Parameters.SKU);
@@ -213,50 +259,18 @@
                     data: {
                         labels: labels,
                         datasets: [
-                            {
-                                label: 'Actual Sales',
-                                data: salesPadded,
-                                borderColor: colors.primary,
-                                backgroundColor: 'rgba(37,99,235,0.08)',
-                                fill: true,
-                                tension: 0.3,
-                                pointRadius: 2
-                            },
-                            {
-                                label: 'SMA (' + (nHist - smaOffset > 0 ? sma.length : 0) + '-pt)',
-                                data: smaPadded,
-                                borderColor: colors.accent,
-                                borderDash: [5, 3],
-                                pointRadius: 0,
-                                tension: 0.3
-                            },
-                            {
-                                label: 'Exp. Smoothing',
-                                data: sesPadded,
-                                borderColor: colors.warning,
-                                borderDash: [2, 2],
-                                pointRadius: 0,
-                                tension: 0.3
-                            },
-                            {
-                                label: 'Forecast',
-                                data: fcastPadded,
-                                borderColor: colors.danger,
-                                borderDash: [8, 4],
-                                pointRadius: 0,
-                                tension: 0
-                            }
+                            { label:'Actual Sales', data:salesPadded, borderColor:colors.primary, backgroundColor:'rgba(37,99,235,0.08)', fill:true, tension:0.3, pointRadius:2 },
+                            { label:'SMA', data:smaPadded, borderColor:colors.accent, borderDash:[5,3], pointRadius:0, tension:0.3 },
+                            { label:'Exp. Smoothing', data:sesPadded, borderColor:colors.warning, borderDash:[2,2], pointRadius:0, tension:0.3 },
+                            { label:'Forecast', data:fcastPadded, borderColor:colors.danger, borderDash:[8,4], pointRadius:0, tension:0 }
                         ]
                     },
                     options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: { position: 'bottom', labels: { boxWidth: 12, padding: 10, font: { size: 11 } } }
-                        },
+                        responsive:true, maintainAspectRatio:false,
+                        plugins: { legend: { position:'bottom', labels: { boxWidth:12, padding:10, font:{ size:11 } } } },
                         scales: {
-                            y: { beginAtZero: true, title: { display: true, text: 'Units', font: { size: 11 } } },
-                            x: { ticks: { maxTicksLimit: 15, font: { size: 10 } } }
+                            y: { beginAtZero:true, title:{ display:true, text:'Units', font:{ size:11 } } },
+                            x: { ticks:{ maxTicksLimit:15, font:{ size:10 } } }
                         }
                     }
                 });
@@ -270,27 +284,16 @@
                     data: {
                         labels: ['Holding Cost', 'Ordering Cost'],
                         datasets: [{
-                            data: [
-                                r.Simulation.AvgAnnualHoldingCost,
-                                r.Simulation.AvgAnnualOrderCost
-                            ],
+                            data: [r.Simulation.AvgAnnualHoldingCost, r.Simulation.AvgAnnualOrderCost],
                             backgroundColor: [colors.holding, colors.ordering],
-                            borderWidth: 2,
-                            borderColor: '#fff'
+                            borderWidth: 2, borderColor: '#fff'
                         }]
                     },
                     options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
+                        responsive:true, maintainAspectRatio:false,
                         plugins: {
-                            legend: { position: 'bottom', labels: { boxWidth: 12, padding: 8, font: { size: 11 } } },
-                            tooltip: {
-                                callbacks: {
-                                    label: function(ctx) {
-                                        return ctx.label + ': €' + ctx.parsed.toFixed(2);
-                                    }
-                                }
-                            }
+                            legend: { position:'bottom', labels: { boxWidth:12, padding:8, font:{ size:11 } } },
+                            tooltip: { callbacks: { label: function(ctx){ return ctx.label+': €'+ctx.parsed.toFixed(2); } } }
                         }
                     }
                 });
@@ -298,43 +301,28 @@
         });
 
         // ── SKU Comparison bar chart ───────────────────────────────
-        {{if gt .SKUCount 1}}
+        {{if and (gt .SKUCount 1) (not .IsGuest)}}
         var compCtx = document.getElementById('comparison-chart');
         if (compCtx) {
-            var skuLabels = reports.map(function(r) { return r.Parameters.SKU; });
+            var skuLabels = reports.map(function(r){ return r.Parameters.SKU; });
             new Chart(compCtx, {
                 type: 'bar',
                 data: {
                     labels: skuLabels,
                     datasets: [
-                        {
-                            label: 'Holding Cost (€)',
-                            data: reports.map(function(r) { return r.Simulation.AvgAnnualHoldingCost; }),
-                            backgroundColor: colors.holding
-                        },
-                        {
-                            label: 'Ordering Cost (€)',
-                            data: reports.map(function(r) { return r.Simulation.AvgAnnualOrderCost; }),
-                            backgroundColor: colors.ordering
-                        }
+                        { label:'Holding Cost (€)', data:reports.map(function(r){ return r.Simulation.AvgAnnualHoldingCost; }), backgroundColor:colors.holding },
+                        { label:'Ordering Cost (€)', data:reports.map(function(r){ return r.Simulation.AvgAnnualOrderCost; }), backgroundColor:colors.ordering }
                     ]
                 },
                 options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
+                    responsive:true, maintainAspectRatio:false,
                     plugins: {
-                        legend: { position: 'bottom', labels: { boxWidth: 12 } },
-                        tooltip: {
-                            callbacks: {
-                                label: function(ctx) {
-                                    return ctx.dataset.label + ': €' + ctx.parsed.y.toFixed(2);
-                                }
-                            }
-                        }
+                        legend: { position:'bottom', labels:{ boxWidth:12 } },
+                        tooltip: { callbacks:{ label: function(ctx){ return ctx.dataset.label+': €'+ctx.parsed.y.toFixed(2); } } }
                     },
                     scales: {
-                        x: { stacked: true },
-                        y: { stacked: true, beginAtZero: true, title: { display: true, text: 'Annual Cost (€)' } }
+                        x: { stacked:true },
+                        y: { stacked:true, beginAtZero:true, title:{ display:true, text:'Annual Cost (€)' } }
                     }
                 }
             });

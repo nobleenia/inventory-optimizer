@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Reports · Inventory Optimizer</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    {{template "nav" .}}
+
+    <main class="container">
+        <section class="reports-section">
+            <div class="reports-header">
+                <h2>My Saved Reports</h2>
+                <a href="/upload" class="btn-primary" style="width:auto; padding:0.6rem 1.5rem;">+ New Analysis</a>
+            </div>
+
+            {{if .SavedReports}}
+            <div class="reports-list">
+                {{range .SavedReports}}
+                <div class="report-row">
+                    <div class="report-row-info">
+                        <a href="/reports/{{.ID}}" class="report-row-title">{{.Title}}</a>
+                        <div class="report-row-meta">
+                            <span>{{.SKUCount}} SKUs</span>
+                            <span>·</span>
+                            <span>Service level {{printf "%.0f" (mult .ServiceLevel 100)}}%</span>
+                            <span>·</span>
+                            <span>{{.CreatedAt.Format "Jan 2, 2006 at 15:04"}}</span>
+                        </div>
+                    </div>
+                    <div class="report-row-actions">
+                        <a href="/reports/{{.ID}}" class="btn-secondary btn-sm">View</a>
+                        <form action="/reports/{{.ID}}/delete" method="POST" class="inline-form"
+                              onsubmit="return confirm('Delete this report?');">
+                            <button type="submit" class="btn-outline btn-sm btn-danger-outline">Delete</button>
+                        </form>
+                    </div>
+                </div>
+                {{end}}
+            </div>
+            {{else}}
+            <div class="empty-state">
+                <span class="empty-icon">📊</span>
+                <h3>No reports yet</h3>
+                <p>Upload your CSV files to run your first inventory analysis.</p>
+                <a href="/upload" class="btn-primary" style="width:auto; padding:0.75rem 2rem;">Run Analysis</a>
+            </div>
+            {{end}}
+        </section>
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>Inventory Optimizer v{{.Version}} · Built for e-commerce sellers</p>
+        </div>
+    </footer>
+</body>
+</html>

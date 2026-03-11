@@ -1,0 +1,6 @@
+sku,current_inventory,lead_time_days,unit_cost,order_cost,holding_cost_rate
+LAPTOP-15,45,28,450.00,75.00,0.22
+USB-HUB-7P,150,14,15.50,25.00,0.28
+HDMI-CABLE,300,10,4.25,20.00,0.30
+MOUSE-BT,90,18,22.00,30.00,0.25
+WEBCAM-4K,35,21,65.00,40.00,0.20

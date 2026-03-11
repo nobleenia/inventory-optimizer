@@ -1,0 +1,2 @@
+sku,unit_cost,order_cost,holding_rate,lead_time_days,current_stock,service_level
+WIDGET-A,5.00,25.00,0.20,7,500,0.95

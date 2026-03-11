@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Account · Inventory Optimizer</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    {{template "nav" .}}
+
+    <main class="container">
+        <section class="auth-card">
+            <h2>Create your free account</h2>
+            <p class="auth-sub">Save reports, get full analysis for all SKUs, and download PDF reports.</p>
+
+            {{if .Error}}
+            <div class="alert alert-warning">{{.Error}}</div>
+            {{end}}
+
+            <form action="/register" method="POST" class="auth-form">
+                <div class="form-group">
+                    <label for="email">Email address</label>
+                    <input type="email" id="email" name="email" value="{{.Email}}" required
+                           placeholder="you@example.com" autocomplete="email" autofocus>
+                </div>
+
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" required
+                           placeholder="At least 8 characters" autocomplete="new-password" minlength="8">
+                </div>
+
+                <div class="form-group">
+                    <label for="confirm_password">Confirm password</label>
+                    <input type="password" id="confirm_password" name="confirm_password" required
+                           placeholder="Type your password again" autocomplete="new-password" minlength="8">
+                </div>
+
+                <button type="submit" class="btn-primary">Create Account</button>
+            </form>
+
+            <p class="auth-switch">
+                Already have an account? <a href="/login">Log in</a>
+            </p>
+        </section>
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>Inventory Optimizer v{{.Version}} · Built for e-commerce sellers</p>
+        </div>
+    </footer>
+</body>
+</html>

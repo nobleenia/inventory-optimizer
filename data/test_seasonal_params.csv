@@ -1,0 +1,4 @@
+sku,unit_cost,order_cost,holding_rate,lead_time_days,current_stock,service_level
+WINTER-COAT,85.00,150.00,0.22,21,60,0.95
+SUNGLASSES,12.50,60.00,0.25,14,120,0.90
+UMBRELLA,8.75,45.00,0.30,10,200,0.95

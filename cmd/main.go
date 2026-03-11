@@ -134,7 +134,40 @@ func runAPI(port string) {
 // ---------------------------------------------------------------------------
 
 func runWeb(port string) {
-	server := web.NewServer(port)
+	// Try to connect to database for auth + saved reports.
+	// If DATABASE_URL is not set or connection fails, run in guest-only mode.
+	var db *store.DB
+	var authSvc *auth.Service
+
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn != "" {
+		jwtSecret := os.Getenv("JWT_SECRET")
+		if jwtSecret == "" {
+			jwtSecret = "dev-secret-change-in-production"
+			log.Println("WARNING: Using default JWT secret. Set JWT_SECRET env var in production.")
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		var err error
+		db, err = store.New(ctx, dsn)
+		if err != nil {
+			log.Printf("Database connection failed: %v", err)
+			log.Println("Starting web server in guest-only mode (no auth, no saved reports).")
+		} else {
+			authSvc = auth.NewService(auth.DefaultConfig(jwtSecret))
+			log.Println("Database connected — auth and saved reports enabled.")
+		}
+	} else {
+		log.Println("DATABASE_URL not set — starting in guest-only mode.")
+	}
+
+	if db != nil {
+		defer db.Close()
+	}
+
+	server := web.NewServer(port, db, authSvc)
 	if err := server.Start(); err != nil {
 		log.Fatalf("Server error: %v\n", err)
 	}

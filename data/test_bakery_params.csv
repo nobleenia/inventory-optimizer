@@ -1,0 +1,3 @@
+sku,current_inventory,lead_time_days,unit_cost,order_cost,holding_cost_rate
+SOURDOUGH,400,3,2.10,15.00,0.35
+CROISSANT,250,2,1.45,12.00,0.40

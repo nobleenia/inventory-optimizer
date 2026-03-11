@@ -2,7 +2,7 @@
 
 A lightweight inventory decision engine for e-commerce sellers. It analyses historical sales data, computes optimal reorder policies, and simulates future inventory performance using Monte-Carlo methods — available as a CLI tool, a browser-based web application, and a REST API with JWT authentication.
 
-**Version:** 0.4.0  
+**Version:** 0.5.0  
 **Language:** Go 1.21+  
 **Author:** Noble Eluwah
 
@@ -25,12 +25,16 @@ For each SKU in your catalogue the engine produces:
 | **Variability Flag** | Stable, variable, or erratic demand classification |
 | **Interactive Charts** | Demand trends, cost breakdowns, SKU comparisons |
 | **PDF Report** | Branded multi-page PDF with all metrics |
+| **User Accounts** | Register, login, save & manage reports |
+| **Guest Mode** | Analyse without signing up (first SKU full, rest truncated) |
 
 ---
 
-## Quick Start
+## How to Launch
 
-### Option A — Command Line
+This project has **three modes**. You only need Go 1.21+ installed. PostgreSQL is optional.
+
+### 1. Command Line (no server needed)
 
 ```bash
 # Build
@@ -43,31 +47,55 @@ go build -o inventory-optimizer ./cmd/
   -output output/report.csv
 ```
 
-Results are printed to the terminal and optionally exported as CSV.
+Results print to the terminal and optionally export as CSV.
 
-### Option B — Web Interface
+### 2. Web Interface (recommended for most users)
+
+The web server runs in **two configurations**:
+
+#### Guest-only mode (no database)
+
+Anyone can upload CSVs and run analysis. Results are truncated for guests (first SKU shown in full, rest are summaries). No saved reports, no PDF/CSV download.
 
 ```bash
-# Build
 go build -o inventory-optimizer ./cmd/
-
-# Launch the web server
-./inventory-optimizer -web
-
-# Open your browser at http://localhost:8080
+./inventory-optimizer -web -port :8080
 ```
 
-Upload your CSV files through the browser, review per-SKU results with plain-English recommendations, and download a CSV report — no terminal knowledge required.
+Open http://localhost:8080 in your browser.
 
-### Option C — REST API
+#### Full mode (with PostgreSQL)
+
+Adds user registration/login, full analysis for all SKUs, saved reports, and PDF/CSV downloads.
 
 ```bash
-# Start PostgreSQL (Docker)
-docker-compose up -d
+# 1. Start PostgreSQL
+docker-compose up -d postgres
 
-# Build & launch the API server
+# 2. Set environment variables
+export DATABASE_URL="postgres://inventory:inventory@localhost:5433/inventory?sslmode=disable"
+export JWT_SECRET="your-secret-key-here"  # change in production
+
+# 3. Build and run
 go build -o inventory-optimizer ./cmd/
-./inventory-optimizer -api
+./inventory-optimizer -web -port :8080
+```
+
+The server auto-detects the database. If `DATABASE_URL` is set and the connection succeeds, auth is enabled. If not, it falls back to guest-only mode.
+
+### 3. REST API (for integrations)
+
+```bash
+# Start PostgreSQL
+docker-compose up -d postgres
+
+# Set environment variables
+export DATABASE_URL="postgres://inventory:inventory@localhost:5433/inventory?sslmode=disable"
+export JWT_SECRET="your-secret-key-here"
+
+# Build and launch
+go build -o inventory-optimizer ./cmd/
+./inventory-optimizer -api -port :8080
 
 # Register
 curl -X POST http://localhost:8080/api/auth/register \
@@ -93,6 +121,22 @@ curl http://localhost:8080/api/reports \
 
 Full API documentation is in [docs/openapi.yaml](docs/openapi.yaml).
 
+### 4. Docker (full stack)
+
+```bash
+# Run everything (PostgreSQL + web server with auth)
+docker-compose up -d
+
+# Open http://localhost:8080
+```
+
+Or run just the web server without a database:
+
+```bash
+docker build -t inventory-optimizer .
+docker run -p 8080:8080 inventory-optimizer -web
+```
+
 ---
 
 ## CLI Flags
@@ -107,11 +151,11 @@ Full API documentation is in [docs/openapi.yaml](docs/openapi.yaml).
 | `-output` | *(none)* | Path for CSV export (omit to skip) |
 | `-version` | — | Print version and exit |
 
-### Environment Variables (API mode)
+### Environment Variables (Web full mode & API mode)
 
 | Variable | Default | Description |
 |---|---|---|
-| `DATABASE_URL` | `postgres://inventory:inventory@localhost:5433/inventory?sslmode=disable` | PostgreSQL connection string |
+| `DATABASE_URL` | *(none — guest-only if unset)* | PostgreSQL connection string |
 | `JWT_SECRET` | *(dev default)* | HMAC-SHA256 signing key for JWT tokens |
 
 ---
@@ -198,8 +242,8 @@ inventory-optimizer/
 │   │   ├── response.go          # JSON envelope helpers
 │   │   └── api_test.go          # 9 tests
 │   └── web/
-│       ├── server.go            # HTML web server, routes & handlers
-│       ├── templates/           # Embedded HTML templates (landing, upload, results, error)
+│       ├── server.go            # HTML web server, auth, sessions, routes
+│       ├── templates/           # HTML templates (landing, upload, results, login, register, reports, error)
 │       └── static/              # CSS & JS (Chart.js integration)
 ├── .github/
 │   └── workflows/
@@ -213,7 +257,11 @@ inventory-optimizer/
 ├── .env.example                 # Environment variable template
 └── data/
     ├── sales_history.csv        # Sample sales data (3 SKUs × 52 weeks)
-    └── sku_parameters.csv       # Sample SKU config
+    ├── sku_parameters.csv       # Sample SKU config
+    ├── test_simple_*.csv        # Test: 1 SKU, minimal data
+    ├── test_electronics_*.csv   # Test: 5 SKUs, electronics store
+    ├── test_seasonal_*.csv      # Test: 2 SKUs, strong seasonality
+    └── test_bakery_*.csv        # Test: 3 SKUs, high-frequency bakery
 ```
 
 Each package has a **single responsibility** and communicates only through types defined in `models/`. The `engine` package orchestrates the full pipeline so that CLI, web, and API modes share one code path.
@@ -227,6 +275,17 @@ go test ./... -v
 ```
 
 69 unit tests across 7 packages covering parsing, statistics, inventory calculations, simulation, reporting, JWT auth, API middleware, and demand forecasting.
+
+### Test CSV Files
+
+Four sets of test data are included in `data/` for frontend testing:
+
+| Dataset | SKUs | Weeks | Scenario |
+|---|---|---|---|
+| `test_simple` | 1 | 12 | Minimal data, quick verification |
+| `test_electronics` | 5 | 52 | Realistic electronics store with varied demand |
+| `test_seasonal` | 2 | 52 | Strong seasonal patterns (summer/winter) |
+| `test_bakery` | 3 | 26 | High-frequency daily bakery items |
 
 ---
 
@@ -256,12 +315,12 @@ Rate limited to 60 requests/minute per user. Full OpenAPI spec: [docs/openapi.ya
 
 ```bash
 # Build image
-docker build -t inventory-optimizer:0.4.0 .
+docker build -t inventory-optimizer:0.5.0 .
 
-# Run web mode (no database needed)
-docker run -p 8080:8080 inventory-optimizer:0.4.0 -web
+# Run web mode in guest-only mode (no database needed)
+docker run -p 8080:8080 inventory-optimizer:0.5.0 -web
 
-# Run full stack (API + PostgreSQL)
+# Run full stack (web + auth + PostgreSQL)
 docker-compose up -d
 ```
 
@@ -279,6 +338,17 @@ The project includes a GitHub Actions pipeline (`.github/workflows/ci.yml`) that
 ---
 
 ## Changelog
+
+### v0.5.0
+
+- **User registration & login** — full sign-up/login flow in the web UI with session cookies (JWT-based). Shared nav bar shows auth state on every page.
+- **Guest mode** — anyone can upload CSVs and analyse without signing up. Guests see the first SKU in full detail; remaining SKUs show a summary card with a prompt to sign up. No CSV/PDF downloads for guests.
+- **Saved reports** — authenticated users' analyses are auto-saved to PostgreSQL. A "My Reports" page lists all past reports with links to view, download, or delete.
+- **Graceful degradation** — web server auto-detects `DATABASE_URL`. If set, enables auth + persistence. If unset, runs in guest-only mode with zero configuration.
+- **Nav bar overhaul** — shared `_nav.html` partial used across all pages. Shows login/register for guests, email + reports link + logout for authenticated users.
+- **Auth CSS** — clean auth cards, form styling, guest-locked overlay, report list styling.
+- **4 test CSV datasets** — simple (1 SKU), electronics (5 SKUs), seasonal (2 SKUs), bakery (3 SKUs) for frontend testing.
+- **Launch documentation** — comprehensive README with all three launch configurations (guest-only, full web, Docker).
 
 ### v0.4.0
 

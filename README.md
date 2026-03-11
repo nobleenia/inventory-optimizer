@@ -2,7 +2,7 @@
 
 A lightweight inventory decision engine for e-commerce sellers. It analyses historical sales data, computes optimal reorder policies, and simulates future inventory performance using Monte-Carlo methods — available as a CLI tool, a browser-based web application, and a REST API with JWT authentication.
 
-**Version:** 0.3.0  
+**Version:** 0.4.0  
 **Language:** Go 1.21+  
 **Author:** Noble Eluwah
 
@@ -20,6 +20,11 @@ For each SKU in your catalogue the engine produces:
 | **Expected Stockouts** | Estimated stockout events per year |
 | **Average Inventory** | Mean units on hand across the simulation |
 | **Annual Cost** | Estimated holding + ordering costs |
+| **Demand Forecast** | SMA + exponential smoothing projections |
+| **Trend Detection** | Rising, falling, or stable demand classification |
+| **Variability Flag** | Stable, variable, or erratic demand classification |
+| **Interactive Charts** | Demand trends, cost breakdowns, SKU comparisons |
+| **PDF Report** | Branded multi-page PDF with all metrics |
 
 ---
 
@@ -160,7 +165,9 @@ inventory-optimizer/
 │   │   └── csv_reader_test.go   # 11 tests
 │   ├── demand/
 │   │   ├── statistics.go        # Demand statistical analysis
-│   │   └── statistics_test.go   # 7 tests
+│   │   ├── statistics_test.go   # 7 tests
+│   │   ├── forecast.go          # SMA, SES, trend, variability forecasting
+│   │   └── forecast_test.go     # 12 tests
 │   ├── inventory/
 │   │   ├── eoq.go               # Economic Order Quantity
 │   │   ├── safety_stock.go      # Safety stock (Z-score approach)
@@ -172,6 +179,7 @@ inventory-optimizer/
 │   │   └── monte_carlo_test.go  # 6 tests
 │   ├── reporting/
 │   │   ├── results.go           # CLI display & CSV export
+│   │   ├── pdf.go               # Branded multi-page PDF generation
 │   │   └── results_test.go      # 5 tests
 │   ├── engine/
 │   │   └── engine.go            # High-level pipeline orchestrator
@@ -183,20 +191,25 @@ inventory-optimizer/
 │   │   ├── users.go             # User CRUD
 │   │   └── reports.go           # Report CRUD (JSONB storage)
 │   ├── api/
-│   │   ├── router.go            # REST API routes & server
-│   │   ├── handlers.go          # Auth, analyze, reports, profile handlers
+│   │   ├── router.go            # REST API routes & server (11 endpoints)
+│   │   ├── handlers.go          # Auth, analyze, reports, profile, PDF
 │   │   ├── middleware.go        # JWT auth, CORS, request logging
 │   │   ├── ratelimit.go         # In-memory token bucket rate limiter
 │   │   ├── response.go          # JSON envelope helpers
 │   │   └── api_test.go          # 9 tests
 │   └── web/
 │       ├── server.go            # HTML web server, routes & handlers
-│       ├── templates/           # Embedded HTML templates
-│       └── static/              # CSS & JS
+│       ├── templates/           # Embedded HTML templates (landing, upload, results, error)
+│       └── static/              # CSS & JS (Chart.js integration)
+├── .github/
+│   └── workflows/
+│       └── ci.yml               # CI/CD: lint, test, build, Docker push
 ├── docs/
 │   ├── WORKING_DOC.md           # Project specification
 │   └── openapi.yaml             # OpenAPI 3.0 spec for the REST API
-├── docker-compose.yml           # PostgreSQL 16 container
+├── Dockerfile                   # Multi-stage build (scratch-based ~25 MB)
+├── docker-compose.yml           # PostgreSQL 16 + app service
+├── .dockerignore
 ├── .env.example                 # Environment variable template
 └── data/
     ├── sales_history.csv        # Sample sales data (3 SKUs × 52 weeks)
@@ -213,7 +226,7 @@ Each package has a **single responsibility** and communicates only through types
 go test ./... -v
 ```
 
-57 unit tests across 7 packages covering parsing, statistics, inventory calculations, simulation, reporting, JWT auth, and API middleware.
+69 unit tests across 7 packages covering parsing, statistics, inventory calculations, simulation, reporting, JWT auth, API middleware, and demand forecasting.
 
 ---
 
@@ -229,6 +242,7 @@ go test ./... -v
 | `GET` | `/api/reports` | Bearer | List saved reports (paginated) |
 | `GET` | `/api/reports/{id}` | Bearer | Get full report with results |
 | `GET` | `/api/reports/{id}/csv` | Bearer | Download report as CSV |
+| `GET` | `/api/reports/{id}/pdf` | Bearer | Download report as PDF |
 | `DELETE` | `/api/reports/{id}` | Bearer | Delete a report |
 | `GET` | `/api/user/profile` | Bearer | Get authenticated user profile |
 
@@ -236,7 +250,46 @@ Rate limited to 60 requests/minute per user. Full OpenAPI spec: [docs/openapi.ya
 
 ---
 
+## Deployment
+
+### Docker (recommended)
+
+```bash
+# Build image
+docker build -t inventory-optimizer:0.4.0 .
+
+# Run web mode (no database needed)
+docker run -p 8080:8080 inventory-optimizer:0.4.0 -web
+
+# Run full stack (API + PostgreSQL)
+docker-compose up -d
+```
+
+### CI/CD
+
+The project includes a GitHub Actions pipeline (`.github/workflows/ci.yml`) that:
+
+1. **Lints** — `go vet` + `staticcheck`
+2. **Tests** — race detector + coverage report
+3. **Builds** — cross-compiles for Linux and macOS (amd64 + arm64)
+4. **Publishes** — builds and pushes Docker image to GHCR on version tags
+
+---
+
+---
+
 ## Changelog
+
+### v0.4.0
+
+- **Demand forecasting** — Simple Moving Average (SMA), Single Exponential Smoothing (SES), 8-week projections, linear trend detection (rising/falling/stable), demand variability classification (stable/variable/erratic).
+- **Interactive dashboard** — Chart.js-powered results page with per-SKU demand trend charts (actual + SMA + SES + forecast), cost breakdown doughnut charts, and a cross-SKU stacked cost comparison bar chart.
+- **PDF reports** — branded multi-page PDF generation (cover page with summary table + per-SKU detail pages) via `go-pdf/fpdf`. Downloadable from both web UI and REST API.
+- **Dockerfile** — multi-stage build producing a ~25 MB scratch-based image with static binary + embedded assets.
+- **Production Docker Compose** — `app` service builds from Dockerfile, connects to PostgreSQL, supports `JWT_SECRET` env var.
+- **GitHub Actions CI/CD** — lint (go vet + staticcheck), test (race detector + coverage), cross-compile (linux/amd64, darwin/amd64, darwin/arm64), Docker build & push to GHCR on version tags.
+- **Landing page** — marketing-style home page with hero, feature highlights, how-it-works steps, audience grid, and CTA. Upload form moved to `/upload`.
+- **12 new forecast tests** — SMA, SES, linear regression, trend/variability classification, integration tests. Total: 69 tests.
 
 ### v0.3.0
 

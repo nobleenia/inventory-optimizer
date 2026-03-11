@@ -9,6 +9,7 @@ package engine
 import (
 	"fmt"
 	"io"
+	"sort"
 	"time"
 
 	"github.com/noble-ch/inventory-optimizer/internal/demand"
@@ -23,6 +24,7 @@ type Options struct {
 	ServiceLevel float64
 	SimRuns      int
 	SimWeeks     int
+	ForecastOpts demand.ForecastOptions
 }
 
 // DefaultOptions returns production defaults.
@@ -31,6 +33,7 @@ func DefaultOptions() Options {
 		ServiceLevel: inventory.DefaultServiceLevel,
 		SimRuns:      simulation.DefaultRuns,
 		SimWeeks:     simulation.DefaultWeeks,
+		ForecastOpts: demand.DefaultForecastOptions(),
 	}
 }
 
@@ -116,6 +119,16 @@ func runPipeline(
 		simResults[p.SKU] = simulation.Run(p, statsMap[p.SKU], policies[p.SKU], cfg)
 	}
 
+	// Build ordered weekly sales per SKU for forecasting.
+	weeklySalesBySKU := groupWeeklySales(sales)
+
+	// Compute forecast per SKU.
+	forecasts := make(map[string]models.ForecastResult, len(paramSlice))
+	for _, p := range paramSlice {
+		ws := weeklySalesBySKU[p.SKU]
+		forecasts[p.SKU] = demand.Forecast(p.SKU, ws, opts.ForecastOpts)
+	}
+
 	reports := make([]models.SKUReport, 0, len(paramSlice))
 	for _, p := range paramSlice {
 		reports = append(reports, models.SKUReport{
@@ -123,6 +136,7 @@ func runPipeline(
 			Demand:     statsMap[p.SKU],
 			Policy:     policies[p.SKU],
 			Simulation: simResults[p.SKU],
+			Forecast:   forecasts[p.SKU],
 		})
 	}
 
@@ -135,6 +149,31 @@ func indexParams(slice []models.SKUParameters) map[string]models.SKUParameters {
 		m[p.SKU] = p
 	}
 	return m
+}
+
+// groupWeeklySales collects weekly unit sales per SKU in chronological order.
+func groupWeeklySales(records []models.SalesRecord) map[string][]float64 {
+	type entry struct {
+		week  time.Time
+		units float64
+	}
+	tmp := make(map[string][]entry)
+	for _, r := range records {
+		tmp[r.SKU] = append(tmp[r.SKU], entry{r.Week, float64(r.UnitsSold)})
+	}
+
+	result := make(map[string][]float64, len(tmp))
+	for sku, entries := range tmp {
+		sort.Slice(entries, func(i, j int) bool {
+			return entries[i].week.Before(entries[j].week)
+		})
+		vals := make([]float64, len(entries))
+		for i, e := range entries {
+			vals[i] = e.units
+		}
+		result[sku] = vals
+	}
+	return result
 }
 
 func errStrings(errs []error) []string {

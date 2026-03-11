@@ -5,12 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Analysis Results · Inventory Optimizer</title>
     <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 </head>
 <body>
     <header>
-        <div class="container">
-            <h1><a href="/" class="header-link">📦 Inventory Optimizer</a></h1>
-            <p class="subtitle">Analysis Report</p>
+        <div class="container header-bar">
+            <a href="/" class="header-link"><h1>📦 Inventory Optimizer</h1></a>
+            <nav class="header-nav">
+                <a href="/upload" class="btn-header">New Analysis</a>
+            </nav>
         </div>
     </header>
 
@@ -31,18 +34,33 @@
                 <span class="meta-item">🎯 Service level: <strong>95%</strong></span>
             </div>
             <div class="report-actions">
-                <a href="/download/csv?path={{.CSVPath}}" class="btn-secondary">⬇ Download CSV</a>
-                <a href="/" class="btn-outline">← New Analysis</a>
+                <a href="/download/csv?path={{.CSVPath}}" class="btn-secondary">⬇ CSV</a>
+                <a href="/download/pdf?path={{.PDFPath}}" class="btn-secondary">⬇ PDF</a>
+                <a href="/upload" class="btn-outline">← New Analysis</a>
             </div>
         </div>
 
+        <!-- ── SKU Comparison Chart ─────────────────────────────────── -->
+        {{if gt .SKUCount 1}}
+        <section class="chart-section">
+            <h3 class="chart-title">SKU Cost Comparison</h3>
+            <div class="chart-wrapper chart-wrapper-wide">
+                <canvas id="comparison-chart"></canvas>
+            </div>
+        </section>
+        {{end}}
+
+        {{$idx := 0}}
         {{range .Reports}}
+        <!-- ── SKU Card ──────────────────────────────────────────────── -->
         <section class="sku-card">
             <div class="sku-header">
                 <h2>{{.Parameters.SKU}}</h2>
                 <div class="sku-badges">
                     <span class="badge">{{.Parameters.CurrentInventory}} units on hand</span>
                     <span class="badge">{{.Parameters.LeadTimeDays}}-day lead time</span>
+                    <span class="badge badge-trend badge-{{.Forecast.TrendLabel}}">📈 {{.Forecast.TrendLabel}}</span>
+                    <span class="badge badge-var badge-{{.Forecast.SeasonalityFlag}}">📊 {{.Forecast.SeasonalityFlag}}</span>
                 </div>
             </div>
 
@@ -110,6 +128,18 @@
                 </div>
             </div>
 
+            <!-- Charts row: demand trend + cost breakdown -->
+            <div class="chart-row">
+                <div class="chart-wrapper">
+                    <h4 class="chart-title">Demand Trend &amp; Forecast</h4>
+                    <canvas id="demand-chart-{{.Parameters.SKU}}"></canvas>
+                </div>
+                <div class="chart-wrapper chart-wrapper-sm">
+                    <h4 class="chart-title">Cost Breakdown</h4>
+                    <canvas id="cost-chart-{{.Parameters.SKU}}"></canvas>
+                </div>
+            </div>
+
             <!-- Plain-English recommendation -->
             <div class="recommendation">
                 <h4>💡 What This Means</h4>
@@ -125,6 +155,8 @@
                     With this policy, you may experience approximately <strong>{{fixed1 .Simulation.AvgStockouts}} stockout events</strong> per year.
                     {{end}}
                     The estimated total inventory cost is <strong>{{currency .Simulation.AvgTotalAnnualCost}}</strong> per year.
+                    Demand trend is <strong>{{.Forecast.TrendLabel}}</strong> and
+                    variability is <strong>{{.Forecast.SeasonalityFlag}}</strong>.
                 </p>
             </div>
         </section>
@@ -136,5 +168,179 @@
             <p>Inventory Optimizer v{{.Version}} · Analysis based on 500 Monte-Carlo simulations per SKU</p>
         </div>
     </footer>
+
+    <script>
+    (function() {
+        var reports = {{json .Reports}};
+        var colors = {
+            primary: '#2563eb',
+            accent: '#059669',
+            warning: '#d97706',
+            danger: '#dc2626',
+            muted: '#94a3b8',
+            holding: '#f59e0b',
+            ordering: '#3b82f6'
+        };
+
+        reports.forEach(function(r) {
+            // ── Demand trend chart ─────────────────────────────────
+            var sales = r.Forecast.WeeklySales || [];
+            var sma = r.Forecast.SMA || [];
+            var ses = r.Forecast.SES || [];
+            var fcastSES = r.Forecast.ForecastedSES || [];
+            var nHist = sales.length;
+            var nFcast = fcastSES.length;
+
+            // Build labels: Week 1..N, then F1..F8
+            var labels = [];
+            for (var i = 1; i <= nHist; i++) labels.push('W' + i);
+            for (var i = 1; i <= nFcast; i++) labels.push('F' + i);
+
+            // Pad SMA to align with the end of historical data
+            var smaOffset = nHist - sma.length;
+            var smaPadded = new Array(smaOffset).fill(null).concat(sma).concat(new Array(nFcast).fill(null));
+            var sesPadded = ses.concat(new Array(nFcast).fill(null));
+            var salesPadded = sales.concat(new Array(nFcast).fill(null));
+            var fcastPadded = new Array(nHist).fill(null);
+            // Connect forecast to last SES value
+            fcastPadded[nHist - 1] = ses[ses.length - 1];
+            fcastPadded = fcastPadded.concat(fcastSES);
+
+            var dCtx = document.getElementById('demand-chart-' + r.Parameters.SKU);
+            if (dCtx) {
+                new Chart(dCtx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [
+                            {
+                                label: 'Actual Sales',
+                                data: salesPadded,
+                                borderColor: colors.primary,
+                                backgroundColor: 'rgba(37,99,235,0.08)',
+                                fill: true,
+                                tension: 0.3,
+                                pointRadius: 2
+                            },
+                            {
+                                label: 'SMA (' + (nHist - smaOffset > 0 ? sma.length : 0) + '-pt)',
+                                data: smaPadded,
+                                borderColor: colors.accent,
+                                borderDash: [5, 3],
+                                pointRadius: 0,
+                                tension: 0.3
+                            },
+                            {
+                                label: 'Exp. Smoothing',
+                                data: sesPadded,
+                                borderColor: colors.warning,
+                                borderDash: [2, 2],
+                                pointRadius: 0,
+                                tension: 0.3
+                            },
+                            {
+                                label: 'Forecast',
+                                data: fcastPadded,
+                                borderColor: colors.danger,
+                                borderDash: [8, 4],
+                                pointRadius: 0,
+                                tension: 0
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { position: 'bottom', labels: { boxWidth: 12, padding: 10, font: { size: 11 } } }
+                        },
+                        scales: {
+                            y: { beginAtZero: true, title: { display: true, text: 'Units', font: { size: 11 } } },
+                            x: { ticks: { maxTicksLimit: 15, font: { size: 10 } } }
+                        }
+                    }
+                });
+            }
+
+            // ── Cost breakdown doughnut ────────────────────────────
+            var cCtx = document.getElementById('cost-chart-' + r.Parameters.SKU);
+            if (cCtx) {
+                new Chart(cCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Holding Cost', 'Ordering Cost'],
+                        datasets: [{
+                            data: [
+                                r.Simulation.AvgAnnualHoldingCost,
+                                r.Simulation.AvgAnnualOrderCost
+                            ],
+                            backgroundColor: [colors.holding, colors.ordering],
+                            borderWidth: 2,
+                            borderColor: '#fff'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { position: 'bottom', labels: { boxWidth: 12, padding: 8, font: { size: 11 } } },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(ctx) {
+                                        return ctx.label + ': €' + ctx.parsed.toFixed(2);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+        });
+
+        // ── SKU Comparison bar chart ───────────────────────────────
+        {{if gt .SKUCount 1}}
+        var compCtx = document.getElementById('comparison-chart');
+        if (compCtx) {
+            var skuLabels = reports.map(function(r) { return r.Parameters.SKU; });
+            new Chart(compCtx, {
+                type: 'bar',
+                data: {
+                    labels: skuLabels,
+                    datasets: [
+                        {
+                            label: 'Holding Cost (€)',
+                            data: reports.map(function(r) { return r.Simulation.AvgAnnualHoldingCost; }),
+                            backgroundColor: colors.holding
+                        },
+                        {
+                            label: 'Ordering Cost (€)',
+                            data: reports.map(function(r) { return r.Simulation.AvgAnnualOrderCost; }),
+                            backgroundColor: colors.ordering
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom', labels: { boxWidth: 12 } },
+                        tooltip: {
+                            callbacks: {
+                                label: function(ctx) {
+                                    return ctx.dataset.label + ': €' + ctx.parsed.y.toFixed(2);
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { stacked: true },
+                        y: { stacked: true, beginAtZero: true, title: { display: true, text: 'Annual Cost (€)' } }
+                    }
+                }
+            });
+        }
+        {{end}}
+    })();
+    </script>
 </body>
 </html>

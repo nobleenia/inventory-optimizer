@@ -58,5 +58,6 @@ func (s *Server) routes() {
 	s.mux.Handle("GET /api/reports/{id}", s.requireAuth(http.HandlerFunc(s.handleGetReport)))
 	s.mux.Handle("DELETE /api/reports/{id}", s.requireAuth(http.HandlerFunc(s.handleDeleteReport)))
 	s.mux.Handle("GET /api/reports/{id}/csv", s.requireAuth(http.HandlerFunc(s.handleReportCSV)))
+	s.mux.Handle("GET /api/reports/{id}/pdf", s.requireAuth(http.HandlerFunc(s.handleReportPDF)))
 	s.mux.Handle("GET /api/user/profile", s.requireAuth(http.HandlerFunc(s.handleProfile)))
 }

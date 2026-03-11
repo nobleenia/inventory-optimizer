@@ -7,6 +7,7 @@ package web
 
 import (
 	"embed"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"log"
@@ -32,6 +33,17 @@ var templateFuncs = template.FuncMap{
 	"fixed1":   func(f float64) string { return fmt.Sprintf("%.1f", f) },
 	"fixed0":   func(f float64) string { return fmt.Sprintf("%.0f", f) },
 	"upper":    strings.ToUpper,
+	"json": func(v interface{}) template.JS {
+		b, _ := json.Marshal(v)
+		return template.JS(b)
+	},
+	"seq": func(n int) []int {
+		s := make([]int, n)
+		for i := range s {
+			s[i] = i + 1
+		}
+		return s
+	},
 }
 
 // Server holds the HTTP server configuration.
@@ -58,6 +70,7 @@ func NewServer(addr string) *Server {
 	s.mux.HandleFunc("/upload", s.handleUpload)
 	s.mux.HandleFunc("/analyze", s.handleAnalyze)
 	s.mux.HandleFunc("/download/csv", s.handleDownloadCSV)
+	s.mux.HandleFunc("/download/pdf", s.handleDownloadPDF)
 	s.mux.Handle("/static/", http.FileServer(http.FS(content)))
 
 	return s
@@ -136,12 +149,19 @@ func (s *Server) handleAnalyze(w http.ResponseWriter, r *http.Request) {
 		log.Printf("CSV export warning: %v", exportErr)
 	}
 
+	// Store reports in a temp PDF for download.
+	tmpPDF := fmt.Sprintf("/tmp/inventory-report-%d.pdf", time.Now().UnixNano())
+	if exportErr := reporting.ExportPDF(tmpPDF, reports); exportErr != nil {
+		log.Printf("PDF export warning: %v", exportErr)
+	}
+
 	data := map[string]interface{}{
 		"Reports":  reports,
 		"Warnings": warnings,
 		"Elapsed":  elapsed.Round(time.Millisecond).String(),
 		"Version":  models.Version,
 		"CSVPath":  tmpFile,
+		"PDFPath":  tmpPDF,
 		"SKUCount": len(reports),
 	}
 
@@ -164,6 +184,25 @@ func (s *Server) handleDownloadCSV(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/csv")
 	w.Header().Set("Content-Disposition", "attachment; filename=inventory-report.csv")
+	w.Write(data)
+}
+
+// handleDownloadPDF serves the generated PDF report.
+func (s *Server) handleDownloadPDF(w http.ResponseWriter, r *http.Request) {
+	path := r.URL.Query().Get("path")
+	if path == "" || !strings.HasPrefix(path, "/tmp/inventory-report-") {
+		http.Error(w, "Invalid download path", http.StatusBadRequest)
+		return
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		http.Error(w, "Report file not found. Please run the analysis again.", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/pdf")
+	w.Header().Set("Content-Disposition", "attachment; filename=inventory-report.pdf")
 	w.Write(data)
 }
 

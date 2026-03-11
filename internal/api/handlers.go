@@ -333,3 +333,28 @@ func (s *Server) handleReportCSV(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=report-%s.csv", reportID))
 	w.Write(buf.Bytes())
 }
+
+func (s *Server) handleReportPDF(w http.ResponseWriter, r *http.Request) {
+	uid, _ := userFromContext(r.Context())
+	reportID := r.PathValue("id")
+
+	report, err := s.db.GetReport(r.Context(), uid, reportID)
+	if errors.Is(err, store.ErrReportNotFound) {
+		writeError(w, http.StatusNotFound, "Report not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Failed to retrieve report")
+		return
+	}
+
+	var buf bytes.Buffer
+	if err := reporting.WritePDF(&buf, report.Results); err != nil {
+		writeError(w, http.StatusInternalServerError, "Failed to generate PDF")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/pdf")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=report-%s.pdf", reportID))
+	w.Write(buf.Bytes())
+}

@@ -17,5 +17,19 @@ services:
       timeout: 3s
       retries: 5
 
+  app:
+    build: .
+    container_name: inventory-app
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: postgres://inventory:inventory@postgres:5432/inventory?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["-api", "-port", ":8080"]
+
 volumes:
   pgdata:

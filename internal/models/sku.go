@@ -6,7 +6,7 @@ package models
 import "time"
 
 // Version is the semantic version of the engine, set at build time.
-const Version = "0.3.0"
+const Version = "0.4.0"
 
 // ---------------------------------------------------------------------------
 // Input layer — raw data ingested from CSV files
@@ -78,6 +78,42 @@ type SimulationResult struct {
 }
 
 // ---------------------------------------------------------------------------
+// Forecast layer — demand forecasting outputs
+// ---------------------------------------------------------------------------
+
+// ForecastResult holds the output of demand forecasting for a single SKU.
+type ForecastResult struct {
+	SKU string
+
+	// Historical weekly sales used as input (in chronological order).
+	WeeklySales []float64
+
+	// Simple Moving Average (window = min(4, len(sales))).
+	SMA []float64
+
+	// Single Exponential Smoothing fitted values.
+	SES []float64
+
+	// Forecasted demand for the next N weeks (default 8).
+	ForecastWeeks int
+	ForecastedSMA []float64 // flat projection of last SMA value
+	ForecastedSES []float64 // flat projection of last SES value
+
+	// Trend: linear regression slope of weekly demand.
+	TrendSlope     float64
+	TrendIntercept float64
+	TrendLabel     string // "rising", "falling", "stable"
+
+	// Seasonality: coefficient of variation (stddev/mean).
+	// High CV (>0.5) suggests possible seasonality or erratic demand.
+	CoeffOfVariation float64
+	SeasonalityFlag  string // "stable", "variable", "erratic"
+
+	// Smoothing parameter used for SES.
+	Alpha float64
+}
+
+// ---------------------------------------------------------------------------
 // Report layer — unified per-SKU summary
 // ---------------------------------------------------------------------------
 
@@ -88,4 +124,5 @@ type SKUReport struct {
 	Demand     DemandStats
 	Policy     InventoryPolicy
 	Simulation SimulationResult
+	Forecast   ForecastResult
 }

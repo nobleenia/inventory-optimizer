@@ -484,6 +484,15 @@ main { padding: 2rem 0; flex: 1; }
     max-width: 440px;
     margin: 2rem auto;
 }
+.auth-back {
+    display: inline-block;
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+    color: var(--color-muted);
+    text-decoration: none;
+    transition: color 0.2s;
+}
+.auth-back:hover { color: var(--color-primary); }
 .auth-card h2 { font-size: 1.4rem; margin-bottom: 0.35rem; }
 .auth-sub { color: var(--color-muted); font-size: 0.9rem; margin-bottom: 1.5rem; line-height: 1.6; }
 .auth-form { display: flex; flex-direction: column; gap: 1.1rem; }

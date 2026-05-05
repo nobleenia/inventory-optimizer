@@ -100,7 +100,36 @@ func NewServer(addr string, db *store.DB, authSvc *auth.Service) *Server {
 	s.mux.HandleFunc("GET /reports/{id}", s.handleReportDetail)
 	s.mux.HandleFunc("POST /reports/{id}/delete", s.handleReportDelete)
 
+	// API routes.
+	s.mux.HandleFunc("POST /api/v1/auth/register", s.handleAPIRegister)
+	s.mux.HandleFunc("POST /api/v1/auth/login", s.handleAPILogin)
+	s.mux.HandleFunc("POST /api/v1/analyze", s.handleAPIAnalyze)
+	s.mux.HandleFunc("GET /api/v1/reports", s.handleAPIReportsList)
+	s.mux.HandleFunc("GET /api/v1/reports/{id}", s.handleAPIReportDetail)
+	s.mux.HandleFunc("DELETE /api/v1/reports/{id}", s.handleAPIReportDelete)
+
 	return s
+}
+
+// corsMiddleware adds basic CORS headers to API routes and handles OPTIONS preflight.
+func (s *Server) corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Only apply CORS generously to API routes, or to all for simplicity here.
+		origin := r.Header.Get("Origin")
+		if origin != "" {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+		}
+
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }
 
 // Start begins listening. It blocks until the server shuts down.
@@ -111,7 +140,10 @@ func (s *Server) Start() error {
 	}
 	log.Printf("Starting web server on %s [%s mode]\n", s.Addr, mode)
 	log.Printf("Open http://localhost%s in your browser.\n", s.Addr)
-	return http.ListenAndServe(s.Addr, s.mux)
+
+	// Wrap mux with CORS middleware
+	handler := s.corsMiddleware(s.mux)
+	return http.ListenAndServe(s.Addr, handler)
 }
 
 // hasAuth returns true when the server is configured with database + auth.
@@ -141,11 +173,22 @@ func (s *Server) clearSessionCookie(w http.ResponseWriter) {
 	})
 }
 
-// currentUser returns the authenticated user's claims, or nil.
+// currentUser returns the authenticated user's claims, checking the Authorization header first, then the session cookie.
 func (s *Server) currentUser(r *http.Request) *auth.Claims {
 	if s.auth == nil {
 		return nil
 	}
+
+	// 1. Try Bearer token
+	authHeader := r.Header.Get("Authorization")
+	if strings.HasPrefix(authHeader, "Bearer ") {
+		token := strings.TrimPrefix(authHeader, "Bearer ")
+		if claims, err := s.auth.ValidateAccessToken(token); err == nil {
+			return claims
+		}
+	}
+
+	// 2. Try cookie
 	cookie, err := r.Cookie(sessionCookieName)
 	if err != nil {
 		return nil

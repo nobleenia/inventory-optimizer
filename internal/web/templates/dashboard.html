@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard · Inventory Optimizer</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    {{template "nav" .}}
+
+    <main class="container">
+        <div class="dashboard-header">
+            <h2>Welcome back</h2>
+            <a href="/upload" class="btn-primary">New Analysis</a>
+        </div>
+
+        <section class="dashboard-stats">
+            <div class="stat-card">
+                <span class="stat-label">Saved Reports</span>
+                <span class="stat-value">{{.TotalReports}}</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">SKUs Analysed</span>
+                <span class="stat-value">{{.TotalSKUs}}</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">Last Analysis</span>
+                <span class="stat-value">{{if .LastAnalysis}}{{.LastAnalysis}}{{else}}-{{end}}</span>
+            </div>
+        </section>
+
+        <section class="dashboard-recent">
+            <h3>Recent Reports</h3>
+            {{if .Reports}}
+                <div class="report-list">
+                {{range .Reports}}
+                    <div class="report-item">
+                        <div class="report-meta">
+                            <h4><a href="/reports/{{.ID}}">{{.Title}}</a></h4>
+                            <p>{{.SKUCount}} SKUs · {{.CreatedAt.Format "Jan 02, 2006"}}</p>
+                        </div>
+                        <div class="report-actions">
+                            <a href="/reports/{{.ID}}" class="btn-secondary">View</a>
+                        </div>
+                    </div>
+                {{end}}
+                </div>
+                <div style="margin-top: 1rem; text-align: center;">
+                    <a href="/reports" class="btn-outline">View All Reports</a>
+                </div>
+            {{else}}
+                <div class="empty-state">
+                    <p>You haven't run any analyses yet.</p>
+                    <a href="/upload" class="btn-primary" style="margin-top: 1rem;">Run your first analysis</a>
+                </div>
+            {{end}}
+        </section>
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>Inventory Optimizer v{{.Version}} · Built for e-commerce sellers</p>
+        </div>
+    </footer>
+</body>
+</html>

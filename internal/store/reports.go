@@ -147,3 +147,27 @@ func (db *DB) DeleteReport(ctx context.Context, userID, reportID string) error {
 	}
 	return nil
 }
+
+// ReportStats holds aggregate statistics for a user's dashboard.
+type ReportStats struct {
+	TotalReports int
+	TotalSKUs    int
+	LastAnalysis *time.Time
+}
+
+// GetReportStats fetches high-level statistics for a dashboard.
+func (db *DB) GetReportStats(ctx context.Context, userID string) (*ReportStats, error) {
+	stats := &ReportStats{}
+
+	err := db.Pool.QueryRow(ctx,
+		`SELECT COUNT(*), COALESCE(SUM(sku_count), 0), MAX(created_at)
+		 FROM reports WHERE user_id = $1`,
+		userID,
+	).Scan(&stats.TotalReports, &stats.TotalSKUs, &stats.LastAnalysis)
+
+	if err != nil {
+		return nil, fmt.Errorf("get report stats: %w", err)
+	}
+
+	return stats, nil
+}

@@ -95,6 +95,7 @@ func NewServer(addr string, db *store.DB, authSvc *auth.Service) *Server {
 	s.mux.HandleFunc("GET /logout", s.handleLogout)
 
 	// Authenticated routes.
+	s.mux.HandleFunc("GET /dashboard", s.handleDashboard)
 	s.mux.HandleFunc("GET /reports", s.handleReportsList)
 	s.mux.HandleFunc("GET /reports/{id}", s.handleReportDetail)
 	s.mux.HandleFunc("POST /reports/{id}/delete", s.handleReportDelete)
@@ -178,6 +179,11 @@ func (s *Server) baseData(r *http.Request) map[string]interface{} {
 func (s *Server) handleLanding(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
+		return
+	}
+	// Redirect logged-in users to the dashboard.
+	if s.currentUser(r) != nil {
+		http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
 		return
 	}
 	s.render(w, "landing.html", s.baseData(r))
@@ -464,8 +470,45 @@ func (s *Server) handleDownloadPDF(w http.ResponseWriter, r *http.Request) {
 }
 
 // ---------------------------------------------------------------------------
-// Handlers — Saved Reports
+// Handlers — Dashboard & Saved Reports
 // ---------------------------------------------------------------------------
+
+func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
+	claims := s.currentUser(r)
+	if claims == nil {
+		http.Redirect(w, r, "/login?redirect=/dashboard", http.StatusSeeOther)
+		return
+	}
+	if s.db == nil {
+		http.Redirect(w, r, "/upload", http.StatusSeeOther)
+		return
+	}
+
+	stats, err := s.db.GetReportStats(r.Context(), claims.Subject)
+	if err != nil {
+		s.renderError(w, r, "Failed to load dashboard stats: "+err.Error())
+		return
+	}
+
+	reports, _, err := s.db.ListReports(r.Context(), claims.Subject, 5, 0)
+	if err != nil {
+		s.renderError(w, r, "Failed to load recent reports: "+err.Error())
+		return
+	}
+
+	d := s.baseData(r)
+	d["TotalReports"] = stats.TotalReports
+	d["TotalSKUs"] = stats.TotalSKUs
+
+	if stats.LastAnalysis != nil {
+		d["LastAnalysis"] = stats.LastAnalysis.Format("Jan 02, 2006")
+	} else {
+		d["LastAnalysis"] = ""
+	}
+	d["Reports"] = reports
+
+	s.render(w, "dashboard.html", d)
+}
 
 func (s *Server) handleReportsList(w http.ResponseWriter, r *http.Request) {
 	claims := s.currentUser(r)

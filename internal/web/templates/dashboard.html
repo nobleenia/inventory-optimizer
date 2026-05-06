@@ -5,6 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard · Inventory Optimizer</title>
     <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        .premium-section { margin-top: 2rem; background: #fffbf0; border: 1px solid #ffeeba; padding: 1.5rem; border-radius: 8px; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-top: 1rem; }
+        .abc-matrix { display: grid; grid-template-columns: auto 1fr 1fr 1fr; gap: 4px; text-align: center; }
+        .abc-matrix .header { font-weight: bold; background: #f8f9fa; padding: 0.5rem; }
+        .abc-matrix .cell { background: #fff; border: 1px solid #dee2e6; padding: 0.5rem; border-radius: 4px; min-height: 40px; display:flex; align-items:center; justify-content:center;}
+        .cell-AX { background-color: #d4edda; } /* High value, predictable */
+        .cell-CZ { background-color: #f8d7da; } /* Low value, erratic */
+        .budget-form { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+        .budget-form input { flex: 1; padding: 0.5rem; }
+        table.analytics-table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+        table.analytics-table th, table.analytics-table td { border-bottom: 1px solid #eee; padding: 0.5rem; text-align: left; }
+        .alert-box { background: #fff3cd; color: #856404; padding: 1rem; border-radius: 4px; margin-bottom: 1rem; border: 1px solid #ffeeba; }
+        .spinner { font-style: italic; color: #666; }
+    </style>
 </head>
 <body>
     {{template "nav" .}}
@@ -15,7 +30,56 @@
             <a href="/upload" class="btn-primary">New Analysis</a>
         </div>
 
-        <section class="dashboard-stats">
+        <!-- Premium Analytics Dashboard -->
+        <section class="premium-section" id="premiumAnalytics">
+            <h3>⭐ Premium Analytics</h3>
+            <p>Advanced catalogue insights from your logged sales.</p>
+            
+            <div id="alertsContainer"></div>
+
+            <div class="grid-2">
+                <!-- Smart Restock / Budget -->
+                <div class="stat-card" style="text-align:left;">
+                    <h4>Smart Restock (Budget Optimizer)</h4>
+                    <p style="font-size:0.85em; margin-bottom:1rem;">Allocate a fixed budget across SKUs that urgently need reordering.</p>
+                    <form class="budget-form" id="budgetForm">
+                        <input type="number" id="budgetAmount" placeholder="Enter Budget $" required min="1">
+                        <button type="submit" class="btn-primary">Optimize</button>
+                    </form>
+                    <div id="budgetResult"><span class="spinner">Enter a budget to calculate</span></div>
+                </div>
+
+                <!-- ABC/XYZ Matrix -->
+                <div class="stat-card" style="text-align:left;">
+                    <h4>ABC / XYZ Matrix</h4>
+                    <p style="font-size:0.85em; margin-bottom:1rem;">Classifying Value (A-C) vs Predictability (X-Z).</p>
+                    <div class="abc-matrix" id="abcMatrix">
+                        <div class="header"></div>
+                        <div class="header">X (Steady)</div>
+                        <div class="header">Y (Variable)</div>
+                        <div class="header">Z (Erratic)</div>
+                        <!-- A -->
+                        <div class="header">A (High $)</div>
+                        <div class="cell cell-AX" id="cell-A-X">-</div>
+                        <div class="cell" id="cell-A-Y">-</div>
+                        <div class="cell" id="cell-A-Z">-</div>
+                        <!-- B -->
+                        <div class="header">B (Med $)</div>
+                        <div class="cell" id="cell-B-X">-</div>
+                        <div class="cell" id="cell-B-Y">-</div>
+                        <div class="cell" id="cell-B-Z">-</div>
+                        <!-- C -->
+                        <div class="header">C (Low $)</div>
+                        <div class="cell" id="cell-C-X">-</div>
+                        <div class="cell" id="cell-C-Y">-</div>
+                        <div class="cell cell-CZ" id="cell-C-Z">-</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Standard Dashboard -->
+        <section class="dashboard-stats" style="margin-top: 2rem;">
             <div class="stat-card">
                 <span class="stat-label">Saved Reports</span>
                 <span class="stat-value">{{.TotalReports}}</span>
@@ -63,5 +127,92 @@
             <p>Inventory Optimizer v{{.Version}} · Built for e-commerce sellers</p>
         </div>
     </footer>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            // Load ABC XYZ Matrix
+            fetch('/api/v1/catalogue/abc-xyz')
+                .then(r => {
+                    if (r.status === 401 || r.status === 402) { 
+                        document.getElementById('premiumAnalytics').style.display = 'none'; 
+                        throw new Error('Not premium'); 
+                    }
+                    return r.json();
+                })
+                .then(data => {
+                    if(!data || Object.keys(data).length === 0) return;
+                    
+                    // Reset counts
+                    let counts = { 'A-X':0, 'A-Y':0, 'A-Z':0, 'B-X':0, 'B-Y':0, 'B-Z':0, 'C-X':0, 'C-Y':0, 'C-Z':0 };
+                    Object.values(data).forEach(sku => {
+                        let key = sku.abc_class + "-" + sku.xyz_class;
+                        if(counts[key] !== undefined) counts[key]++;
+                    });
+
+                    // Update UI
+                    for(let key in counts) {
+                        let el = document.getElementById('cell-' + key);
+                        if(el && counts[key] > 0) {
+                            el.innerHTML = `<strong>${counts[key]}</strong>&nbsp;SKUs`;
+                        } else if (el) {
+                            el.innerHTML = "-";
+                        }
+                    }
+                })
+                .catch(e => console.log("Analytics hidden or failed", e));
+            
+            // Handle Budget Form
+            document.getElementById('budgetForm').addEventListener('submit', e => {
+                e.preventDefault();
+                const btn = e.target.querySelector('button');
+                btn.disabled = true;
+                const budget = parseFloat(document.getElementById('budgetAmount').value);
+                const resDiv = document.getElementById('budgetResult');
+                resDiv.innerHTML = '<span class="spinner">Calculating...</span>';
+
+                fetch('/api/v1/catalogue/budget-optimize', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({budget})
+                })
+                .then(r => r.json().then(data => ({status: r.status, body: data})))
+                .then(({status, body}) => {
+                    btn.disabled = false;
+                    if(status !== 200) {
+                        resDiv.innerHTML = `<div class="alert-box">Error: ${body.error || 'Check if you have run Auto-Analyze.'}</div>`;
+                        return;
+                    }
+                    if(!body || body.length === 0) {
+                        resDiv.innerHTML = '<p>No SKUs currently need reordering.</p>';
+                        return;
+                    }
+                    
+                    let html = `<table class="analytics-table"><tr><th>SKU</th><th>Order Qty</th><th>Subtotal</th></tr>`;
+                    let totalCost = 0;
+                    body.forEach(item => {
+                        html += `<tr><td>${item.sku_id}</td><td>${item.order_quantity}</td><td>$${item.cost.toFixed(2)}</td></tr>`;
+                        totalCost += item.cost;
+                    });
+                    html += `<tr><td colspan="2"><strong>Total Allocated</strong></td><td><strong>$${totalCost.toFixed(2)}</strong></td></tr></table>`;
+                    resDiv.innerHTML = html;
+
+                    // Side effect: if there were items to reorder, this also acts as our 'Reorder Alerts'
+                    const alertsDiv = document.getElementById('alertsContainer');
+                    if (body.length > 0) {
+                        let totalRisk = body.reduce((sum, i) => sum + i.stockout_averted, 0);
+                        alertsDiv.innerHTML = `
+                            <div class="alert-box">
+                                <strong>⚠️ Reorder Alerts:</strong> You have ${body.length} SKU(s) below their Reorder Point. 
+                                Estimated lost revenue risk if ignored: <strong>$${totalRisk.toFixed(2)}</strong>.
+                            </div>`;
+                    }
+                })
+                .catch(err => {
+                    btn.disabled = false;
+                    resDiv.innerHTML = 'Failed to calculate.';
+                });
+            });
+        });
+    </script>
 </body>
 </html>

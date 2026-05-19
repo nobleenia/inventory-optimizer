@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Records · Inventory Optimizer</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        .premium-banner { background: #fffbf0; border: 1px solid #ffeeba; padding: 1rem; border-radius: 8px; margin-bottom: 2rem; }
+        .template-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
+        .template-card { border: 1px solid #dee2e6; border-radius: 8px; padding: 1.5rem; background: #fff; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; }
+        .template-card:hover { transform: translateY(-3px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        .template-card h4 { margin-top: 0; color: #0056b3; }
+        .template-card p { font-size: 0.9em; color: #6c757d; margin-bottom: 0; }
+        
+        #builderSection { display: none; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 1.5rem; margin-bottom: 2rem; }
+        .columns-list { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin: 1rem 0; }
+        .column-item { display: flex; align-items: center; gap: 0.5rem; }
+        
+        .history-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+        .history-table th, .history-table td { padding: 0.75rem; text-align: left; border-bottom: 1px solid #dee2e6; }
+        .history-table th { background: #f1f3f5; }
+    </style>
+</head>
+<body>
+    {{template "nav" .}}
+
+    <main class="container">
+        <div class="dashboard-header">
+            <h2>Smart Records <span style="font-size: 0.5em; background: #ffd700; color: #856404; padding: 2px 6px; border-radius: 4px; vertical-align: middle;">PREMIUM</span></h2>
+        </div>
+
+        <div class="premium-banner">
+            <strong>Welcome to Smart Records!</strong> Generate professional, formula-ready Excel sheets (.xlsx) instantly. 
+            Choose a template below to get started. No Excel expertise required.
+        </div>
+
+        <h3>1. Select a Template</h3>
+        <div class="template-grid" id="templateGrid">
+            <p>Loading templates...</p>
+        </div>
+
+        <div id="builderSection">
+            <h3 id="builderTitle">Template Builder</h3>
+            <p id="builderDesc"></p>
+            
+            <form id="generateForm">
+                <input type="hidden" id="selectedTemplateId" name="template_id">
+                
+                <div style="margin: 1.5rem 0;">
+                    <strong>Options:</strong>
+                    <div style="margin-top: 0.5rem;">
+                        <label style="display: flex; align-items: center; gap: 0.5rem;">
+                            <input type="checkbox" id="prefillCatalogue" name="prefill_catalogue" checked>
+                            Pre-fill with my SKU catalogue data
+                        </label>
+                    </div>
+                </div>
+
+                <strong>Select Columns to Include:</strong>
+                <div class="columns-list" id="columnsList"></div>
+
+                <div style="margin-top: 1.5rem; display: flex; gap: 1rem;">
+                    <button type="submit" class="btn-primary" id="btnGenerate">Generate Excel Sheet</button>
+                    <button type="button" class="btn-outline" id="btnCancel">Cancel</button>
+                </div>
+            </form>
+        </div>
+
+        <h3>2. Generation History</h3>
+        <table class="history-table">
+            <thead>
+                <tr>
+                    <th>Date Generated</th>
+                    <th>Template Formatted</th>
+                    <th>Records Count</th>
+                    <th>Download</th>
+                </tr>
+            </thead>
+            <tbody id="historyBody">
+                <tr><td colspan="4" style="text-align: center; color: #6c757d;">No sheets generated yet.</td></tr>
+            </tbody>
+        </table>
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>Inventory Optimizer v{{.Version}} · Built for e-commerce sellers</p>
+        </div>
+    </footer>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            const grid = document.getElementById('templateGrid');
+            const builder = document.getElementById('builderSection');
+            let currentTemplates = [];
+
+            // Fetch templates
+            fetch('/api/v1/records/templates')
+                .then(r => r.json())
+                .then(data => {
+                    currentTemplates = data || [];
+                    grid.innerHTML = '';
+                    currentTemplates.forEach(tpl => {
+                        const card = document.createElement('div');
+                        card.className = 'template-card';
+                        card.innerHTML = `<h4>${tpl.name}</h4><p>${tpl.description}</p>`;
+                        card.addEventListener('click', () => openBuilder(tpl));
+                        grid.appendChild(card);
+                    });
+                })
+                .catch(err => {
+                    grid.innerHTML = '<p style="color:red;">Failed to load templates.</p>';
+                    console.error(err);
+                });
+
+            function openBuilder(tpl) {
+                document.getElementById('selectedTemplateId').value = tpl.id;
+                document.getElementById('builderTitle').textContent = "Configure: " + tpl.name;
+                document.getElementById('builderDesc').textContent = tpl.description;
+                
+                const colList = document.getElementById('columnsList');
+                colList.innerHTML = '';
+                
+                tpl.columns.forEach((col, idx) => {
+                    const label = document.createElement('label');
+                    label.className = 'column-item';
+                    const checked = true ? 'checked' : '';
+                    label.innerHTML = `<input type="checkbox" name="columns" value="${col.header}" ${checked}> ${col.header}`;
+                    colList.appendChild(label);
+                });
+                
+                builder.style.display = 'block';
+                window.scrollTo({ top: builder.offsetTop - 50, behavior: 'smooth' });
+            }
+
+            document.getElementById('btnCancel').addEventListener('click', () => {
+                builder.style.display = 'none';
+            });
+
+            document.getElementById('generateForm').addEventListener('submit', (e) => {
+                e.preventDefault();
+                const btn = document.getElementById('btnGenerate');
+                btn.disabled = true;
+                btn.textContent = "Generating...";
+
+                const templateId = document.getElementById('selectedTemplateId').value;
+                const prefill = document.getElementById('prefillCatalogue').checked;
+                const selectedCols = Array.from(document.querySelectorAll('input[name="columns"]:checked')).map(cb => cb.value);
+
+                // We will POST this payload to /api/v1/records/generate in Step 5c
+                const payload = {
+                    template_id: templateId,
+                    prefill: prefill,
+                    columns: selectedCols
+                };
+
+                fetch('/api/v1/records/generate', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                })
+                .then(res => {
+                    if (!res.ok) throw new Error("Failed to generate sheet.");
+                    const disposition = res.headers.get('Content-Disposition');
+                    let filename = "Smart_Record.xlsx";
+                    if (disposition && disposition.indexOf('filename=') !== -1) {
+                        filename = disposition.split('filename=')[1].replace(/"/g, '');
+                    }
+                    return res.blob().then(blob => ({blob, filename}));
+                })
+                .then(({blob, filename}) => {
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = url;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    
+                    btn.disabled = false;
+                    btn.textContent = "Generate Excel Sheet";
+                    builder.style.display = "none";
+                    
+                    // Add dummy row to history view just for demo
+                    const tbody = document.getElementById('historyBody');
+                    if (tbody.innerText.includes("No sheets generated")) {
+                         tbody.innerHTML = '';
+                    }
+                    tbody.innerHTML += "<tr><td>" + new Date().toLocaleDateString() + "</td><td>" + filename + "</td><td>" + (prefill ? "Using Catalogue" : "Empty") + "</td><td><a href='javascript:void(0)'>Re-download</a></td></tr>";
+                })
+                .catch(err => {
+                    alert(err.message);
+                    btn.disabled = false;
+                    btn.textContent = "Generate Excel Sheet";
+                });
+            });
+        });
+    </script>
+</body>
+</html>

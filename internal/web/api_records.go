@@ -1,6 +1,8 @@
 package web
 
 import (
+	"os"
+	"time"
 "encoding/json"
 "fmt"
 "net/http"
@@ -85,18 +87,26 @@ skus = userSkus
 }
 
 // 3. Generate the Excel File
-f, err := records.GenerateExcel(*tmpl, req.Columns, skus)
-if err != nil {
-http.Error(w, "Failed to generate Excel: "+err.Error(), http.StatusInternalServerError)
-return
-}
+	f, err := records.GenerateExcel(*tmpl, req.Columns, skus)
+	if err != nil {
+		http.Error(w, "Failed to generate Excel: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 
-// 4. Send directly as file download
-filename := strings.ReplaceAll(tmpl.Name, " ", "_") + ".xlsx"
-w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+	// 4. Save to disk as history/archive
+	if err := os.MkdirAll("data/generated", 0755); err == nil {
+		timestamp := time.Now().Format("20060102_150405")
+		safeName := strings.ReplaceAll(tmpl.Name, " ", "_")
+		localPath := fmt.Sprintf("data/generated/%s_%s_%s.xlsx", claims.Subject, safeName, timestamp)
+		_ = f.SaveAs(localPath) // We ignore errors for disk saves so it doesn't block the user download
+	}
 
-if err := f.Write(w); err != nil {
-http.Error(w, err.Error(), http.StatusInternalServerError)
-}
+	// 5. Send directly as file download
+	filename := strings.ReplaceAll(tmpl.Name, " ", "_") + ".xlsx"
+	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+
+	if err := f.Write(w); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }

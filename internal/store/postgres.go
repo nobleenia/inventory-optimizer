@@ -117,8 +117,30 @@ func (db *DB) migrate(ctx context.Context) error {
 		FOREIGN KEY (user_id, sku_id) REFERENCES skus(user_id, sku_id) ON DELETE CASCADE
 	);
 
-	CREATE INDEX IF NOT EXISTS idx_sales_entries_user_sku ON sales_entries(user_id, sku_id);
+	
+        CREATE TABLE IF NOT EXISTS generated_records (
+                id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                user_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                template_name TEXT NOT NULL,
+                file_path     TEXT NOT NULL,
+                records_count INTEGER NOT NULL DEFAULT 0,
+                created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS idx_generated_records_user_id ON generated_records(user_id);
+        
+        CREATE INDEX IF NOT EXISTS idx_sales_entries_user_sku ON sales_entries(user_id, sku_id);
 	CREATE INDEX IF NOT EXISTS idx_sales_entries_date ON sales_entries(date);
+
+        CREATE TABLE IF NOT EXISTS generated_records (
+                id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                user_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                template_name TEXT NOT NULL,
+                file_path     TEXT NOT NULL,
+                records_count INTEGER NOT NULL DEFAULT 0,
+                created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS idx_generated_records_user_id ON generated_records(user_id);
+
 	`
 	db.Pool.Exec(ctx, `ALTER TABLE skus ADD COLUMN IF NOT EXISTS selling_price DOUBLE PRECISION NOT NULL DEFAULT 0;`)
         db.Pool.Exec(ctx, `ALTER TABLE skus ADD COLUMN IF NOT EXISTS current_stock INTEGER NOT NULL DEFAULT 0;`)

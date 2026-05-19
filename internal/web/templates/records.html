@@ -89,114 +89,112 @@
         </div>
     </footer>
 
+    
     <script>
-        document.addEventListener("DOMContentLoaded", () => {
-            const grid = document.getElementById('templateGrid');
-            const builder = document.getElementById('builderSection');
-            let currentTemplates = [];
-
-            // Fetch templates
-            fetch('/api/v1/records/templates')
-                .then(r => r.json())
-                .then(data => {
-                    currentTemplates = data || [];
-                    grid.innerHTML = '';
-                    currentTemplates.forEach(tpl => {
-                        const card = document.createElement('div');
-                        card.className = 'template-card';
-                        card.innerHTML = `<h4>${tpl.name}</h4><p>${tpl.description}</p>`;
-                        card.addEventListener('click', () => openBuilder(tpl));
-                        grid.appendChild(card);
-                    });
-                })
-                .catch(err => {
-                    grid.innerHTML = '<p style="color:red;">Failed to load templates.</p>';
-                    console.error(err);
+        // Load templates
+        fetch('/api/v1/records/templates')
+            .then(res => res.json())
+            .then(templates => {
+                const select = document.getElementById('template_id');
+                templates.forEach(t => {
+                    const opt = document.createElement('option');
+                    opt.value = t.id;
+                    opt.textContent = t.name + ' - ' + t.description;
+                    select.appendChild(opt);
                 });
-
-            function openBuilder(tpl) {
-                document.getElementById('selectedTemplateId').value = tpl.id;
-                document.getElementById('builderTitle').textContent = "Configure: " + tpl.name;
-                document.getElementById('builderDesc').textContent = tpl.description;
-                
-                const colList = document.getElementById('columnsList');
-                colList.innerHTML = '';
-                
-                tpl.columns.forEach((col, idx) => {
-                    const label = document.createElement('label');
-                    label.className = 'column-item';
-                    const checked = true ? 'checked' : '';
-                    label.innerHTML = `<input type="checkbox" name="columns" value="${col.header}" ${checked}> ${col.header}`;
-                    colList.appendChild(label);
-                });
-                
-                builder.style.display = 'block';
-                window.scrollTo({ top: builder.offsetTop - 50, behavior: 'smooth' });
-            }
-
-            document.getElementById('btnCancel').addEventListener('click', () => {
-                builder.style.display = 'none';
             });
 
-            document.getElementById('generateForm').addEventListener('submit', (e) => {
-                e.preventDefault();
-                const btn = document.getElementById('btnGenerate');
-                btn.disabled = true;
-                btn.textContent = "Generating...";
-
-                const templateId = document.getElementById('selectedTemplateId').value;
-                const prefill = document.getElementById('prefillCatalogue').checked;
-                const selectedCols = Array.from(document.querySelectorAll('input[name="columns"]:checked')).map(cb => cb.value);
-
-                // We will POST this payload to /api/v1/records/generate in Step 5c
-                const payload = {
-                    template_id: templateId,
-                    prefill: prefill,
-                    columns: selectedCols
-                };
-
-                fetch('/api/v1/records/generate', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(payload)
-                })
-                .then(res => {
-                    if (!res.ok) throw new Error("Failed to generate sheet.");
-                    const disposition = res.headers.get('Content-Disposition');
-                    let filename = "Smart_Record.xlsx";
-                    if (disposition && disposition.indexOf('filename=') !== -1) {
-                        filename = disposition.split('filename=')[1].replace(/"/g, '');
-                    }
-                    return res.blob().then(blob => ({blob, filename}));
-                })
-                .then(({blob, filename}) => {
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.style.display = 'none';
-                    a.href = url;
-                    a.download = filename;
-                    document.body.appendChild(a);
-                    a.click();
-                    window.URL.revokeObjectURL(url);
-                    
-                    btn.disabled = false;
-                    btn.textContent = "Generate Excel Sheet";
-                    builder.style.display = "none";
-                    
-                    // Add dummy row to history view just for demo
+        // Load History
+        function loadHistory() {
+            fetch('/api/v1/records/history')
+                .then(res => res.json())
+                .then(records => {
                     const tbody = document.getElementById('historyBody');
-                    if (tbody.innerText.includes("No sheets generated")) {
-                         tbody.innerHTML = '';
+                    tbody.innerHTML = '';
+                    if (!records || records.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#6c757d">No previously generated records found.</td></tr>';
+                        return;
                     }
-                    tbody.innerHTML += "<tr><td>" + new Date().toLocaleDateString() + "</td><td>" + filename + "</td><td>" + (prefill ? "Using Catalogue" : "Empty") + "</td><td><a href='javascript:void(0)'>Re-download</a></td></tr>";
-                })
-                .catch(err => {
-                    alert(err.message);
-                    btn.disabled = false;
-                    btn.textContent = "Generate Excel Sheet";
+                    records.forEach(r => {
+                        const tr = document.createElement('tr');
+                        const date = new Date(r.created_at).toLocaleString();
+                        
+                        tr.innerHTML = `
+                            <td>${date}</td>
+                            <td>${r.template_name}</td>
+                            <td>${r.records_count} rows</td>
+                            <td>
+                                <a href="/records/download/${r.id}" class="btn">Download</a>
+                            </td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
                 });
+        }
+        
+        // Initial load
+        loadHistory();
+
+        // Handle Download newly generated
+        document.getElementById('generateForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const columns = formData.getAll('columns');
+            
+            const payload = {
+                template_id: formData.get('template_id'),
+                prefill: formData.get('prefill') === 'on',
+                columns: columns
+            };
+
+            const btn = this.querySelector('button[type="submit"]');
+            const originalText = btn.textContent;
+            btn.textContent = 'Generating...';
+            btn.disabled = true;
+
+            fetch('/api/v1/records/generate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            })
+            .then(res => {
+                if (!res.ok) throw new Error('Generation failed');
+                
+                // Get filename from Content-Disposition if possible
+                const disposition = res.headers.get('Content-Disposition');
+                let filename = 'SmartRecords.xlsx';
+                if (disposition && disposition.indexOf('filename="') !== -1) {
+                    filename = disposition.split('filename="')[1].split('"')[0];
+                }
+                
+                return res.blob().then(blob => ({blob, filename}));
+            })
+            .then(({blob, filename}) => {
+                // Create a temporary link to download the blob
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                
+                // Refresh history after a short delay
+                setTimeout(loadHistory, 1000);
+            })
+            .catch(err => {
+                alert(err.message);
+            })
+            .finally(() => {
+                btn.textContent = originalText;
+                btn.disabled = false;
             });
         });
     </script>
+
 </body>
 </html>

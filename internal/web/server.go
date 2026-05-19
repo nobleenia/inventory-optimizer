@@ -122,6 +122,8 @@ func NewServer(addr string, db *store.DB, authSvc *auth.Service) *Server {
 	// Records API (Smart Sheets)
 	s.mux.HandleFunc("GET /api/v1/records/templates", s.requirePremium(s.HandleGetTemplates))
 	s.mux.HandleFunc("POST /api/v1/records/generate", s.requirePremium(s.HandleGenerateRecord))
+	s.mux.HandleFunc("GET /api/v1/records/history", s.requirePremium(s.HandleGetRecordsHistory))
+	s.mux.HandleFunc("GET /records/download/{id}", s.requirePremium(s.HandleDownloadRecord))
 	s.mux.HandleFunc("GET /records", s.handleRecordsPage)
 
 	return s

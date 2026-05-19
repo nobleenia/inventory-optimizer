@@ -99,6 +99,19 @@ skus = userSkus
 		safeName := strings.ReplaceAll(tmpl.Name, " ", "_")
 		localPath := fmt.Sprintf("data/generated/%s_%s_%s.xlsx", claims.Subject, safeName, timestamp)
 		_ = f.SaveAs(localPath) // We ignore errors for disk saves so it doesn't block the user download
+
+		// Log into database
+		if s.db != nil {
+			err = s.db.SaveGeneratedRecord(r.Context(), &store.GeneratedRecord{
+				UserID:       claims.Subject,
+				TemplateName: tmpl.Name,
+				FilePath:     localPath,
+				RecordsCount: len(skus),
+			})
+			if err != nil {
+				fmt.Println("Warning: Failed to save record history metadata:", err)
+			}
+		}
 	}
 
 	// 5. Send directly as file download
@@ -109,4 +122,70 @@ skus = userSkus
 	if err := f.Write(w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+// HandleGetRecordsHistory fetches the previously generated Excel targets for a premium user.
+func (s *Server) HandleGetRecordsHistory(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	claims := s.currentUser(r)
+	if claims == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	if s.db == nil {
+		// Provide an empty mock if no database
+		w.Header().Set("Content-Type", "application/json")
+		b, _ := json.Marshal([]store.GeneratedRecord{})
+		w.Write(b)
+		return
+	}
+
+	records, err := s.db.GetGeneratedRecords(r.Context(), claims.Subject)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(records)
+}
+
+// HandleDownloadRecord fetches a previously generated file from history and serves its binary block.
+func (s *Server) HandleDownloadRecord(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	claims := s.currentUser(r)
+	if claims == nil {
+		http.Redirect(w, r, "/login?redirect=/records", http.StatusSeeOther)
+		return
+	}
+
+	recordID := r.PathValue("id")
+	if recordID == "" {
+		http.Error(w, "Missing record ID", http.StatusBadRequest)
+		return
+	}
+
+	if s.db == nil {
+		http.Error(w, "Database unavailable", http.StatusInternalServerError)
+		return
+	}
+
+	record, err := s.db.GetGeneratedRecord(r.Context(), claims.Subject, recordID)
+	if err != nil {
+		http.Error(w, "Record not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s_Historical.xlsx\"", strings.ReplaceAll(record.TemplateName, " ", "_")))
+	http.ServeFile(w, r, record.FilePath)
 }

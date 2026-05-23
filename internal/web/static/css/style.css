@@ -416,6 +416,11 @@ main { padding: 1rem 0 2rem; flex: 1; }
 .continue-card p { margin: 0.15rem 0; }
 .continue-card .muted { color: var(--color-muted); font-size: 0.9rem; }
 
+/* Skeleton loaders */
+.skeleton { background: linear-gradient(90deg, rgba(255,255,255,0.06) 25%, rgba(255,255,255,0.12) 37%, rgba(255,255,255,0.06) 63%); background-size: 400% 100%; animation: pulse 1.4s ease infinite; border-radius: 8px; }
+.skeleton-line { height: 14px; margin-bottom: 8px; }
+@keyframes pulse { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
+
 .report-row,
 .report-item {
     padding: 1rem;

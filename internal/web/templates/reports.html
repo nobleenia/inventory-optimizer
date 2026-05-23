@@ -15,39 +15,69 @@
                 <h2>My Saved Reports</h2>
                 <a href="/upload" class="btn-primary" style="width:auto; padding:0.6rem 1.5rem;">+ New Analysis</a>
             </div>
-
-            {{if .SavedReports}}
-            <div class="reports-list">
-                {{range .SavedReports}}
-                <div class="report-row">
-                    <div class="report-row-info">
-                        <a href="/reports/{{.ID}}" class="report-row-title">{{.Title}}</a>
-                        <div class="report-row-meta">
-                            <span>{{.SKUCount}} SKUs</span>
-                            <span>·</span>
-                            <span>Service level {{printf "%.0f" (mult .ServiceLevel 100)}}%</span>
-                            <span>·</span>
-                            <span>{{.CreatedAt.Format "Jan 2, 2006 at 15:04"}}</span>
+            <div id="reportsContainer">
+                <div class="reports-list" id="reportsListServer">
+                {{if .SavedReports}}
+                    {{range .SavedReports}}
+                    <div class="report-row">
+                        <div class="report-row-info">
+                            <a href="/reports/{{.ID}}" class="report-row-title">{{.Title}}</a>
+                            <div class="report-row-meta">
+                                <span>{{.SKUCount}} SKUs</span>
+                                <span>·</span>
+                                <span>Service level {{printf "%.0f" (mult .ServiceLevel 100)}}%</span>
+                                <span>·</span>
+                                <span>{{.CreatedAt.Format "Jan 2, 2006 at 15:04"}}</span>
+                            </div>
+                        </div>
+                        <div class="report-row-actions">
+                            <a href="/reports/{{.ID}}" class="btn-secondary btn-sm">View</a>
+                            <form action="/reports/{{.ID}}/delete" method="POST" class="inline-form"
+                                  onsubmit="return confirm('Delete this report?');">
+                                <button type="submit" class="btn-outline btn-sm btn-danger-outline">Delete</button>
+                            </form>
                         </div>
                     </div>
-                    <div class="report-row-actions">
-                        <a href="/reports/{{.ID}}" class="btn-secondary btn-sm">View</a>
-                        <form action="/reports/{{.ID}}/delete" method="POST" class="inline-form"
-                              onsubmit="return confirm('Delete this report?');">
-                            <button type="submit" class="btn-outline btn-sm btn-danger-outline">Delete</button>
-                        </form>
+                    {{end}}
+                {{else}}
+                    <div class="empty-state">
+                        <span class="empty-icon">📊</span>
+                        <h3>No reports yet</h3>
+                        <p>Upload your CSV files to run your first inventory analysis.</p>
+                        <a href="/upload" class="btn-primary" style="width:auto; padding:0.75rem 2rem;">Run Analysis</a>
                     </div>
-                </div>
                 {{end}}
+                </div>
+                <div id="reportsListClient" style="display:none">
+                    <!-- Client-side rendered reports will appear here -->
+                </div>
             </div>
-            {{else}}
-            <div class="empty-state">
-                <span class="empty-icon">📊</span>
-                <h3>No reports yet</h3>
-                <p>Upload your CSV files to run your first inventory analysis.</p>
-                <a href="/upload" class="btn-primary" style="width:auto; padding:0.75rem 2rem;">Run Analysis</a>
-            </div>
-            {{end}}
+            <script>
+                // Progressive enhancement: load via API for logged-in users to show loading skeleton
+                (function(){
+                    fetch('/api/v1/reports')
+                    .then(r => {
+                        if (!r.ok) return; // not logged in or no api access
+                        const list = document.getElementById('reportsListClient');
+                        document.getElementById('reportsListServer').style.display = 'none';
+                        list.style.display = 'block';
+                        list.innerHTML = '<div class="report-row"><div style="width:100%"><div class="skeleton skeleton-line" style="width:60%"></div><div class="skeleton skeleton-line" style="width:40%"></div></div></div>';
+                        return r.json();
+                    })
+                    .then(data => {
+                        if (!data) return;
+                        const list = document.getElementById('reportsListClient');
+                        list.innerHTML = '';
+                        data.reports.forEach(r => {
+                            const div = document.createElement('div');
+                            div.className = 'report-row';
+                            div.innerHTML = `<div class="report-row-info"><a href="/reports/${r.id}" class="report-row-title">${r.title}</a><div class="report-row-meta"><span>${r.sku_count} SKUs</span> · <span>${new Date(r.created_at).toLocaleString()}</span></div></div><div class="report-row-actions"><a href="/reports/${r.id}" class="btn-secondary btn-sm">View</a></div>`;
+                            list.appendChild(div);
+                        });
+                    })
+                    .catch(()=>{});
+                })();
+            </script>
         </section>
     </main>
 

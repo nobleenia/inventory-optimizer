@@ -404,6 +404,18 @@ main { padding: 1rem 0 2rem; flex: 1; }
     padding: 2rem 1rem;
 }
 
+/* Dashboard continue card and account status */
+.account-status-pill { margin-left: 1rem; font-size: 0.95rem; color: rgba(255,255,255,0.95); }
+.account-status-pill .status-guest { color: #f1f5f9; font-weight: 600; }
+.account-status-pill .status-authenticated { color: #fde68a; font-weight: 700; }
+.account-status-pill .status-premium { color: #bbf7d0; font-weight: 800; }
+
+.dashboard-continue { margin: 1rem 0; }
+.continue-card { background: var(--color-surface); padding: 1rem 1.25rem; border-radius: 14px; box-shadow: var(--shadow); display: flex; gap: 1rem; align-items: center; justify-content: space-between; }
+.continue-card h3 { margin: 0; font-size: 1rem; }
+.continue-card p { margin: 0.15rem 0; }
+.continue-card .muted { color: var(--color-muted); font-size: 0.9rem; }
+
 .report-row,
 .report-item {
     padding: 1rem;

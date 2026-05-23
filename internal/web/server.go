@@ -238,6 +238,20 @@ func (s *Server) baseData(r *http.Request) map[string]interface{} {
 	d["ActiveRecords"] = strings.HasPrefix(path, "/records")
 	d["ActiveReports"] = strings.HasPrefix(path, "/reports")
 	d["ActiveUpload"] = (path == "/upload")
+	// Account status: guest | authenticated | premium
+	accountStatus := "guest"
+	if s.db == nil {
+		accountStatus = "guest"
+	} else if claims := s.currentUser(r); claims == nil {
+		accountStatus = "authenticated"
+	} else {
+		if sub, err := s.db.GetSubscription(r.Context(), claims.Subject); err == nil && sub != nil && sub.Status == "active" {
+			accountStatus = "premium"
+		} else {
+			accountStatus = "authenticated"
+		}
+	}
+	d["AccountStatus"] = accountStatus
 	return d
 }
 

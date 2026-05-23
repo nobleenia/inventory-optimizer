@@ -21,10 +21,12 @@ services:
     build: .
     restart: unless-stopped
     ports:
-      - "8081:8080"
+      - "8080:8080"
     environment:
-      DATABASE_URL: postgres://inventory:inventory@db:5432/inventory?sslmode=disable
+      DATABASE_URL: postgres://inventory:inventory@host.docker.internal:5433/inventory?sslmode=disable
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       db:
         condition: service_healthy

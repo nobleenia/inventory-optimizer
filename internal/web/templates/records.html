@@ -91,18 +91,48 @@
 
     
     <script>
-        // Load templates
-        fetch('/api/v1/records/templates')
-            .then(res => res.json())
-            .then(templates => {
-                const select = document.getElementById('template_id');
+        // Load templates and render clickable cards
+        async function loadTemplates() {
+            const grid = document.getElementById('templateGrid');
+            grid.innerHTML = '<p>Loading templates...</p>';
+            try {
+                const res = await fetch('/api/v1/records/templates');
+                if (!res.ok) throw new Error('Failed to load templates');
+                const templates = await res.json();
+                if (!templates || templates.length === 0) {
+                    grid.innerHTML = '<p style="color:var(--color-muted)">No templates available.</p>';
+                    return;
+                }
+                grid.innerHTML = '';
                 templates.forEach(t => {
-                    const opt = document.createElement('option');
-                    opt.value = t.id;
-                    opt.textContent = t.name + ' - ' + t.description;
-                    select.appendChild(opt);
+                    const card = document.createElement('div');
+                    card.className = 'template-card';
+                    card.innerHTML = `<h4>${t.name}</h4><p>${t.description}</p>`;
+                    card.addEventListener('click', () => selectTemplate(t));
+                    grid.appendChild(card);
                 });
+            } catch (err) {
+                grid.innerHTML = '<p style="color:var(--color-muted)">Failed to load templates.</p>';
+            }
+        }
+
+        function selectTemplate(tmpl) {
+            document.getElementById('selectedTemplateId').value = tmpl.ID;
+            document.getElementById('builderTitle').textContent = tmpl.Name;
+            document.getElementById('builderDesc').textContent = tmpl.Description;
+            // Populate columns list
+            const columnsList = document.getElementById('columnsList');
+            columnsList.innerHTML = '';
+            tmpl.Columns.forEach((c, idx) => {
+                const id = 'col_' + idx;
+                const div = document.createElement('div');
+                div.className = 'column-item';
+                div.innerHTML = `<label><input type="checkbox" name="columns" value="${c.Header}" checked> ${c.Header}</label>`;
+                columnsList.appendChild(div);
             });
+            document.getElementById('builderSection').style.display = 'block';
+            window.scrollTo({ top: document.getElementById('builderSection').offsetTop - 80, behavior: 'smooth' });
+        }
 
         // Load History
         function loadHistory() {
@@ -133,6 +163,7 @@
         }
         
         // Initial load
+        loadTemplates();
         loadHistory();
 
         // Handle Download newly generated
@@ -143,8 +174,8 @@
             const columns = formData.getAll('columns');
             
             const payload = {
-                template_id: formData.get('template_id'),
-                prefill: formData.get('prefill') === 'on',
+                template_id: formData.get('template_id') || document.getElementById('selectedTemplateId').value,
+                prefill: formData.get('prefill') === 'on' || document.getElementById('prefillCatalogue').checked,
                 columns: columns
             };
 

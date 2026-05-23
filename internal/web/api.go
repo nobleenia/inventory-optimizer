@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/noble-ch/inventory-optimizer/internal/auth"
@@ -40,6 +41,7 @@ func (s *Server) handleAPIRegister(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		s.sendErrorJSON(w, http.StatusBadRequest, "Invalid JSON body")
+
 		return
 	}
 
@@ -328,4 +330,47 @@ func (s *Server) handleAPIReportDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.sendJSON(w, http.StatusOK, map[string]string{"message": "deleted"})
+}
+
+// handleAPISearch performs a lightweight search across SKUs, reports, and generated records.
+func (s *Server) handleAPISearch(w http.ResponseWriter, r *http.Request) {
+	claims := s.currentUser(r)
+	if claims == nil {
+		s.sendErrorJSON(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+	if s.db == nil {
+		s.sendErrorJSON(w, http.StatusServiceUnavailable, "Database not configured")
+		return
+	}
+
+	q := r.URL.Query().Get("q")
+	if q == "" {
+		s.sendErrorJSON(w, http.StatusBadRequest, "Missing q")
+		return
+	}
+
+	// SKUs: load and filter client-side for name or sku match
+	skus, _ := s.db.GetSKUs(r.Context(), claims.Subject)
+	var skusOut []map[string]interface{}
+	ql := strings.ToLower(q)
+	for _, sItem := range skus {
+		if strings.Contains(strings.ToLower(sItem.SKUID), ql) || strings.Contains(strings.ToLower(sItem.Name), ql) {
+			skusOut = append(skusOut, map[string]interface{}{"sku_id": sItem.SKUID, "name": sItem.Name})
+		}
+	}
+
+	// Reports: use ListReports q param
+	reports, _, _ := s.db.ListReports(r.Context(), claims.Subject, 20, 0, q, "", "")
+
+	// Generated records: load and filter
+	gen, _ := s.db.GetGeneratedRecords(r.Context(), claims.Subject)
+	var genOut []map[string]interface{}
+	for _, g := range gen {
+		if strings.Contains(strings.ToLower(g.TemplateName), ql) {
+			genOut = append(genOut, map[string]interface{}{"id": g.ID, "template_name": g.TemplateName})
+		}
+	}
+
+	s.sendJSON(w, http.StatusOK, map[string]interface{}{"skus": skusOut, "reports": reports, "records": genOut})
 }

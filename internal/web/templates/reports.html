@@ -58,12 +58,7 @@
                     </div>
                     {{end}}
                 {{else}}
-                    <div class="empty-state">
-                        <span class="empty-icon">📊</span>
-                        <h3>No saved analyses yet</h3>
-                        <p>Saved reports are listed here so you can manage and re-run them later.</p>
-                        <a href="/upload" class="btn-primary" style="width:auto; padding:0.75rem 2rem;">Run your first analysis</a>
-                    </div>
+                    {{template "empty_state" (dict "Icon" "📊" "Title" "No saved analyses yet" "Message" "Saved reports are listed here so you can manage and re-run them later." "CTA" true "CTAHref" "/upload" "CTALabel" "Run your first analysis")}}
                 {{end}}
                 </div>
 

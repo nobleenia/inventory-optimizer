@@ -53,6 +53,14 @@ var templateFuncs = template.FuncMap{
 		}
 		return s
 	},
+	"dict": func(values ...interface{}) map[string]interface{} {
+		m := make(map[string]interface{})
+		for i := 0; i < len(values)-1; i += 2 {
+			key, _ := values[i].(string)
+			m[key] = values[i+1]
+		}
+		return m
+	},
 }
 
 // Server holds the HTTP server configuration and optional auth/db deps.
@@ -109,6 +117,8 @@ func NewServer(addr string, db *store.DB, authSvc *auth.Service) *Server {
 	s.mux.HandleFunc("GET /api/v1/reports", s.handleAPIReportsList)
 	s.mux.HandleFunc("GET /api/v1/reports/{id}", s.handleAPIReportDetail)
 	s.mux.HandleFunc("DELETE /api/v1/reports/{id}", s.handleAPIReportDelete)
+	// Global search
+	s.mux.HandleFunc("GET /api/v1/search", s.handleAPISearch)
 	// Download endpoints for saved reports
 	s.mux.HandleFunc("GET /api/v1/reports/{id}/csv", s.handleAPIReportCSV)
 	s.mux.HandleFunc("GET /api/v1/reports/{id}/pdf", s.handleAPIReportPDF)

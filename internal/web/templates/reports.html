@@ -48,7 +48,8 @@
                         </div>
                         <div class="report-row-actions">
                             <a href="/reports/{{.ID}}" class="btn-secondary btn-sm">View</a>
-                            <a href="/reports/{{.ID}}" class="btn-outline btn-sm">Download</a>
+                            <a href="/api/v1/reports/{{.ID}}/csv" class="btn-outline btn-sm">CSV</a>
+                            <a href="/api/v1/reports/{{.ID}}/pdf" class="btn-outline btn-sm">PDF</a>
                             <form action="/reports/{{.ID}}/delete" method="POST" class="inline-form"
                                   onsubmit="return confirm('Delete this report?');">
                                 <button type="submit" class="btn-outline btn-sm btn-danger-outline">Delete</button>
@@ -102,7 +103,7 @@
                         data.reports.forEach(r => {
                             const div = document.createElement('div');
                             div.className = 'report-row';
-                            div.innerHTML = `<div class="report-row-left"><label class="compare-checkbox"><input type="checkbox" data-id="${r.id}" class="compare-select"/></label><div class="report-row-info"><a href="/reports/${r.id}" class="report-row-title">${r.title}</a><div class="report-row-meta"><span>${r.sku_count} SKUs</span> · <span>${new Date(r.created_at).toLocaleString()}</span></div></div></div><div class="report-row-actions"><a href="/reports/${r.id}" class="btn-secondary btn-sm">View</a><a href="/reports/${r.id}" class="btn-outline btn-sm">Download</a><button class="btn-outline btn-sm btn-danger-outline delete-btn" data-id="${r.id}">Delete</button></div>`;
+                            div.innerHTML = `<div class="report-row-left"><label class="compare-checkbox"><input type="checkbox" data-id="${r.id}" class="compare-select"/></label><div class="report-row-info"><a href="/reports/${r.id}" class="report-row-title">${r.title}</a><div class="report-row-meta"><span>${r.sku_count} SKUs</span> · <span>${new Date(r.created_at).toLocaleString()}</span></div></div></div><div class="report-row-actions"><a href="/reports/${r.id}" class="btn-secondary btn-sm">View</a><a href="/api/v1/reports/${r.id}/csv" class="btn-outline btn-sm">CSV</a><a href="/api/v1/reports/${r.id}/pdf" class="btn-outline btn-sm">PDF</a><button class="btn-outline btn-sm btn-danger-outline delete-btn" data-id="${r.id}">Delete</button></div>`;
                             clientList.appendChild(div);
                         });
                         attachRowHandlers();
@@ -156,9 +157,7 @@
                     compareBtn.addEventListener('click', ()=>{
                         if(selected.size < 2){ showToast('Select two reports to compare'); return }
                         const ids = Array.from(selected);
-                        // open both in new tabs side-by-side is left to the user; open two tabs
-                        window.open('/reports/'+ids[0], '_blank');
-                        window.open('/reports/'+ids[1], '_blank');
+                        window.location = '/reports/compare?ids=' + encodeURIComponent(ids.join(','));
                     });
 
                     // attach handlers to server-rendered list if visible

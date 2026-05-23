@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Compare Reports · Inventory Optimizer</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    {{template "nav" .}}
+
+    <main class="container">
+        <section class="compare-section">
+            <h2>Compare Reports</h2>
+            <div class="compare-meta">
+                <div class="compare-card">
+                    <h3>{{.ReportA.Title}}</h3>
+                    <p>{{.ReportA.SKUCount}} SKUs · {{.ReportA.CreatedAt.Format "Jan 2, 2006 at 15:04"}}</p>
+                    <a href="/api/v1/reports/{{.ReportA.ID}}/csv" class="btn-outline">Download CSV</a>
+                    <a href="/api/v1/reports/{{.ReportA.ID}}/pdf" class="btn-outline">Download PDF</a>
+                </div>
+                <div class="compare-card">
+                    <h3>{{.ReportB.Title}}</h3>
+                    <p>{{.ReportB.SKUCount}} SKUs · {{.ReportB.CreatedAt.Format "Jan 2, 2006 at 15:04"}}</p>
+                    <a href="/api/v1/reports/{{.ReportB.ID}}/csv" class="btn-outline">Download CSV</a>
+                    <a href="/api/v1/reports/{{.ReportB.ID}}/pdf" class="btn-outline">Download PDF</a>
+                </div>
+            </div>
+
+            <div class="compare-tables">
+                <div class="compare-table">
+                    <h4>Top SKUs — {{.ReportA.Title}}</h4>
+                    <table>
+                        <thead>
+                            <tr><th>SKU</th><th>EOQ</th><th>Safety</th><th>Reorder</th><th>Annual Cost</th></tr>
+                        </thead>
+                        <tbody>
+                            {{range .ReportAPreview}}
+                            <tr>
+                                <td>{{.Parameters.SKU}}</td>
+                                <td>{{printf "%.0f" .Policy.EOQ}}</td>
+                                <td>{{printf "%.0f" .Policy.SafetyStock}}</td>
+                                <td>{{printf "%.0f" .Policy.ReorderPoint}}</td>
+                                <td>{{printf "%.2f" .Simulation.AvgTotalAnnualCost}}</td>
+                            </tr>
+                            {{end}}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="compare-table">
+                    <h4>Top SKUs — {{.ReportB.Title}}</h4>
+                    <table>
+                        <thead>
+                            <tr><th>SKU</th><th>EOQ</th><th>Safety</th><th>Reorder</th><th>Annual Cost</th></tr>
+                        </thead>
+                        <tbody>
+                            {{range .ReportBPreview}}
+                            <tr>
+                                <td>{{.Parameters.SKU}}</td>
+                                <td>{{printf "%.0f" .Policy.EOQ}}</td>
+                                <td>{{printf "%.0f" .Policy.SafetyStock}}</td>
+                                <td>{{printf "%.0f" .Policy.ReorderPoint}}</td>
+                                <td>{{printf "%.2f" .Simulation.AvgTotalAnnualCost}}</td>
+                            </tr>
+                            {{end}}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </section>
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>Inventory Optimizer v{{.Version}}</p>
+        </div>
+    </footer>
+</body>
+</html>

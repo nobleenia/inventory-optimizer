@@ -1,13 +1,16 @@
 package web
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/noble-ch/inventory-optimizer/internal/auth"
 	"github.com/noble-ch/inventory-optimizer/internal/engine"
+	"github.com/noble-ch/inventory-optimizer/internal/reporting"
 	"github.com/noble-ch/inventory-optimizer/internal/store"
 )
 
@@ -238,6 +241,68 @@ func (s *Server) handleAPIReportDetail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.sendJSON(w, http.StatusOK, rep)
+}
+
+// handleAPIReportCSV streams a CSV for a saved report.
+func (s *Server) handleAPIReportCSV(w http.ResponseWriter, r *http.Request) {
+	claims := s.currentUser(r)
+	if claims == nil {
+		s.sendErrorJSON(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+	if s.db == nil {
+		s.sendErrorJSON(w, http.StatusServiceUnavailable, "Database not configured")
+		return
+	}
+	id := r.PathValue("id")
+	if id == "" {
+		s.sendErrorJSON(w, http.StatusBadRequest, "Missing report ID")
+		return
+	}
+	rep, err := s.db.GetReport(r.Context(), claims.Subject, id)
+	if err != nil {
+		s.sendErrorJSON(w, http.StatusNotFound, "Report not found")
+		return
+	}
+	var buf bytes.Buffer
+	if err := reporting.WriteCSV(&buf, rep.Results); err != nil {
+		s.sendErrorJSON(w, http.StatusInternalServerError, "Failed to generate CSV")
+		return
+	}
+	w.Header().Set("Content-Type", "text/csv")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=report-%s.csv", id))
+	w.Write(buf.Bytes())
+}
+
+// handleAPIReportPDF streams a PDF for a saved report.
+func (s *Server) handleAPIReportPDF(w http.ResponseWriter, r *http.Request) {
+	claims := s.currentUser(r)
+	if claims == nil {
+		s.sendErrorJSON(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+	if s.db == nil {
+		s.sendErrorJSON(w, http.StatusServiceUnavailable, "Database not configured")
+		return
+	}
+	id := r.PathValue("id")
+	if id == "" {
+		s.sendErrorJSON(w, http.StatusBadRequest, "Missing report ID")
+		return
+	}
+	rep, err := s.db.GetReport(r.Context(), claims.Subject, id)
+	if err != nil {
+		s.sendErrorJSON(w, http.StatusNotFound, "Report not found")
+		return
+	}
+	var buf bytes.Buffer
+	if err := reporting.WritePDF(&buf, rep.Results); err != nil {
+		s.sendErrorJSON(w, http.StatusInternalServerError, "Failed to generate PDF")
+		return
+	}
+	w.Header().Set("Content-Type", "application/pdf")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=report-%s.pdf", id))
+	w.Write(buf.Bytes())
 }
 
 func (s *Server) handleAPIReportDelete(w http.ResponseWriter, r *http.Request) {

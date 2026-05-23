@@ -98,6 +98,7 @@ func NewServer(addr string, db *store.DB, authSvc *auth.Service) *Server {
 	s.mux.HandleFunc("GET /dashboard", s.handleDashboard)
 	s.mux.HandleFunc("GET /catalogue", s.handleCataloguePage)
 	s.mux.HandleFunc("GET /reports", s.handleReportsList)
+	s.mux.HandleFunc("GET /reports/compare", s.handleReportsCompare)
 	s.mux.HandleFunc("GET /reports/{id}", s.handleReportDetail)
 	s.mux.HandleFunc("POST /reports/{id}/delete", s.handleReportDelete)
 
@@ -108,6 +109,9 @@ func NewServer(addr string, db *store.DB, authSvc *auth.Service) *Server {
 	s.mux.HandleFunc("GET /api/v1/reports", s.handleAPIReportsList)
 	s.mux.HandleFunc("GET /api/v1/reports/{id}", s.handleAPIReportDetail)
 	s.mux.HandleFunc("DELETE /api/v1/reports/{id}", s.handleAPIReportDelete)
+	// Download endpoints for saved reports
+	s.mux.HandleFunc("GET /api/v1/reports/{id}/csv", s.handleAPIReportCSV)
+	s.mux.HandleFunc("GET /api/v1/reports/{id}/pdf", s.handleAPIReportPDF)
 
 	// Catalogue API
 	s.mux.HandleFunc("GET /api/v1/catalogue/skus", s.requirePremium(s.handleAPIGetSKUs))
@@ -676,6 +680,60 @@ func (s *Server) handleReportDelete(w http.ResponseWriter, r *http.Request) {
 	reportID := r.PathValue("id")
 	_ = s.db.DeleteReport(r.Context(), claims.UserID, reportID)
 	http.Redirect(w, r, "/reports", http.StatusSeeOther)
+}
+
+func (s *Server) handleReportsCompare(w http.ResponseWriter, r *http.Request) {
+	claims := s.currentUser(r)
+	if claims == nil {
+		http.Redirect(w, r, "/login?redirect=/reports/compare", http.StatusSeeOther)
+		return
+	}
+	if s.db == nil {
+		http.Redirect(w, r, "/upload", http.StatusSeeOther)
+		return
+	}
+
+	idsParam := r.URL.Query().Get("ids")
+	if idsParam == "" {
+		s.renderError(w, r, "Please select two reports to compare.")
+		return
+	}
+	ids := strings.Split(idsParam, ",")
+	if len(ids) != 2 {
+		s.renderError(w, r, "Please select exactly two reports to compare.")
+		return
+	}
+
+	a, err := s.db.GetReport(r.Context(), claims.UserID, ids[0])
+	if err != nil {
+		s.renderError(w, r, "Failed to load first report.")
+		return
+	}
+	b, err := s.db.GetReport(r.Context(), claims.UserID, ids[1])
+	if err != nil {
+		s.renderError(w, r, "Failed to load second report.")
+		return
+	}
+
+	// Prepare previews (first 10 SKUs) to keep template simple.
+	var aPreview, bPreview []models.SKUReport
+	if len(a.Results) > 10 {
+		aPreview = a.Results[:10]
+	} else {
+		aPreview = a.Results
+	}
+	if len(b.Results) > 10 {
+		bPreview = b.Results[:10]
+	} else {
+		bPreview = b.Results
+	}
+
+	d := s.baseData(r)
+	d["ReportA"] = a
+	d["ReportB"] = b
+	d["ReportAPreview"] = aPreview
+	d["ReportBPreview"] = bPreview
+	s.render(w, "reports_compare.html", d)
 }
 
 // ---------------------------------------------------------------------------

@@ -6,11 +6,11 @@
             ☰
         </button>
         <nav class="header-nav">
-            {{if .IsLoggedIn}}
+                {{if .IsLoggedIn}}
                 <span class="nav-user">{{.UserEmail}}</span>
                 <a href="/dashboard" class="btn-header">Dashboard</a>
-				<a href="/catalogue" class="btn-header btn-header-accent">⭐ Premium</a>
-				<a href="/records" class="btn-header btn-header-accent">⭐ Smart Records</a>
+                <a href="/catalogue" class="btn-header btn-header-accent">Catalogue</a>
+                <a href="/records" class="btn-header btn-header-accent">Smart Records</a>
                 <a href="/reports" class="btn-header">My Reports</a>
                 <a href="/upload" class="btn-header">New Analysis</a>
                 <a href="/logout" class="btn-header btn-outline-header">Logout</a>

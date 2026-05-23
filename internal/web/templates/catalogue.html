@@ -179,8 +179,12 @@
         // Set today's date in modal by default
         document.getElementById('sale_date').valueAsDate = new Date();
 
-        // Helper to show alert
+        // Helper to show alert (delegates to global toast when available)
         function showAlert(msg, isSuccess) {
+            if (window.showToast) {
+                window.showToast(msg, isSuccess ? 'success' : 'error');
+                return;
+            }
             const alert = document.getElementById('pageAlert');
             alert.textContent = msg;
             alert.className = 'alert ' + (isSuccess ? 'alert-success' : 'alert-error');

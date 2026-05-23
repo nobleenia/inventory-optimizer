@@ -542,6 +542,21 @@ table.analytics-table td {
     background: rgba(255,255,255,0.12);
 }
 
+/* Active state for header links */
+.btn-header.active {
+    background: rgba(255,255,255,0.18);
+    border-color: rgba(255,255,255,0.5);
+    box-shadow: inset 0 -2px 0 rgba(255,255,255,0.06);
+    transform: translateY(-1px);
+}
+
+/* Keep mobile menu button visible through tablet breakpoints */
+@media (min-width: 640px) and (max-width: 1199px) {
+    .mobile-menu-btn { display: inline-flex; }
+    /* Ensure header-nav remains dropdown-style on tablets until desktop */
+    .header-nav { position: absolute; }
+}
+
 @media (min-width: 640px) {
     .file-inputs,
     .format-grid,

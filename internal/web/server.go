@@ -230,6 +230,14 @@ func (s *Server) baseData(r *http.Request) map[string]interface{} {
 		d["UserEmail"] = claims.Email
 		d["IsLoggedIn"] = true
 	}
+	// Add current path and active flags for nav active-state styling
+	path := r.URL.Path
+	d["CurrentPath"] = path
+	d["ActiveDashboard"] = (path == "/dashboard")
+	d["ActiveCatalogue"] = strings.HasPrefix(path, "/catalogue")
+	d["ActiveRecords"] = strings.HasPrefix(path, "/records")
+	d["ActiveReports"] = strings.HasPrefix(path, "/reports")
+	d["ActiveUpload"] = (path == "/upload")
 	return d
 }
 

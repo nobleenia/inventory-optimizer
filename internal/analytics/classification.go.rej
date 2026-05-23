@@ -1,0 +1,13 @@
+--- classification.go
++++ classification.go
+@@ -62,7 +78,8 @@
+ demands = append(demands, float64(v))
+ }
+ 
+-mean, stdDev := demand.CalculateDemandStats(demands)
++mu := mean(demands)
++stdDev := stddev(demands, mu)
+ 
+ // Approximate annual demand
+-annualDemand := mean * 52
++annualDemand := mu * 52

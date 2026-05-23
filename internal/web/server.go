@@ -96,6 +96,7 @@ func NewServer(addr string, db *store.DB, authSvc *auth.Service) *Server {
 
 	// Authenticated routes.
 	s.mux.HandleFunc("GET /dashboard", s.handleDashboard)
+	s.mux.HandleFunc("GET /catalogue", s.handleCataloguePage)
 	s.mux.HandleFunc("GET /reports", s.handleReportsList)
 	s.mux.HandleFunc("GET /reports/{id}", s.handleReportDetail)
 	s.mux.HandleFunc("POST /reports/{id}/delete", s.handleReportDelete)
@@ -107,6 +108,23 @@ func NewServer(addr string, db *store.DB, authSvc *auth.Service) *Server {
 	s.mux.HandleFunc("GET /api/v1/reports", s.handleAPIReportsList)
 	s.mux.HandleFunc("GET /api/v1/reports/{id}", s.handleAPIReportDetail)
 	s.mux.HandleFunc("DELETE /api/v1/reports/{id}", s.handleAPIReportDelete)
+
+	// Catalogue API
+	s.mux.HandleFunc("GET /api/v1/catalogue/skus", s.requirePremium(s.handleAPIGetSKUs))
+	s.mux.HandleFunc("POST /api/v1/catalogue/skus", s.requirePremium(s.handleAPICreateSKU))
+	s.mux.HandleFunc("DELETE /api/v1/catalogue/skus/{id}", s.requirePremium(s.handleAPIDeleteSKU))
+	s.mux.HandleFunc("POST /api/v1/catalogue/skus/{id}/sales", s.requirePremium(s.handleAPILogSales))
+	s.mux.HandleFunc("POST /api/v1/catalogue/analyze", s.requirePremium(s.handleAPIAutoAnalyze))
+	s.mux.HandleFunc("GET /api/v1/catalogue/abc-xyz", s.requirePremium(s.handleAPIGetABCXYZ))
+	s.mux.HandleFunc("GET /api/v1/catalogue/skus/{id}/forecast", s.requirePremium(s.handleAPIGetForecast))
+	s.mux.HandleFunc("POST /api/v1/catalogue/budget-optimize", s.requirePremium(s.handleAPIBudgetOptimize))
+
+	// Records API (Smart Sheets)
+	s.mux.HandleFunc("GET /api/v1/records/templates", s.requirePremium(s.HandleGetTemplates))
+	s.mux.HandleFunc("POST /api/v1/records/generate", s.requirePremium(s.HandleGenerateRecord))
+	s.mux.HandleFunc("GET /api/v1/records/history", s.requirePremium(s.HandleGetRecordsHistory))
+	s.mux.HandleFunc("GET /records/download/{id}", s.requirePremium(s.HandleDownloadRecord))
+	s.mux.HandleFunc("GET /records", s.handleRecordsPage)
 
 	return s
 }
@@ -654,4 +672,19 @@ func (s *Server) renderError(w http.ResponseWriter, r *http.Request, msg string)
 	d := s.baseData(r)
 	d["Message"] = msg
 	s.render(w, "error.html", d)
+}
+
+func (s *Server) handleCataloguePage(w http.ResponseWriter, r *http.Request) {
+	claims := s.currentUser(r)
+	if claims == nil {
+		http.Redirect(w, r, "/login?redirect=/catalogue", http.StatusSeeOther)
+		return
+	}
+
+	// Assuming you want to pass Version or minimal template data.
+	data := map[string]interface{}{
+		"Version": "0.8.0", // Mock version or use dynamic
+	}
+
+	s.render(w, "catalogue.html", data)
 }

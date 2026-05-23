@@ -38,6 +38,12 @@ import (
 	"github.com/noble-ch/inventory-optimizer/internal/web"
 )
 
+const (
+	dbStartupAttempts = 8
+	dbStartupTimeout  = 5 * time.Second
+	dbStartupDelay    = 2 * time.Second
+)
+
 func main() {
 	// ── CLI flags ──────────────────────────────────────────────────────
 	webMode := flag.Bool("web", false,
@@ -86,10 +92,7 @@ func runAPI(port string) {
 		log.Println("WARNING: Using default JWT secret. Set JWT_SECRET env var in production.")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	db, err := store.New(ctx, dsn)
+	db, err := connectStoreWithRetry(dsn, "API")
 	if err != nil {
 		log.Fatalf("Database connection failed: %v\n", err)
 	}
@@ -138,6 +141,7 @@ func runWeb(port string) {
 	// If DATABASE_URL is not set or connection fails, run in guest-only mode.
 	var db *store.DB
 	var authSvc *auth.Service
+	var err error
 
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn != "" {
@@ -147,11 +151,7 @@ func runWeb(port string) {
 			log.Println("WARNING: Using default JWT secret. Set JWT_SECRET env var in production.")
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-
-		var err error
-		db, err = store.New(ctx, dsn)
+		db, err = connectStoreWithRetry(dsn, "web")
 		if err != nil {
 			log.Printf("Database connection failed: %v", err)
 			log.Println("Starting web server in guest-only mode (no auth, no saved reports).")
@@ -171,6 +171,33 @@ func runWeb(port string) {
 	if err := server.Start(); err != nil {
 		log.Fatalf("Server error: %v\n", err)
 	}
+}
+
+// connectStoreWithRetry gives PostgreSQL time to finish starting up before
+// deciding whether the app should fall back to guest-only mode.
+func connectStoreWithRetry(dsn, mode string) (*store.DB, error) {
+	var lastErr error
+
+	for attempt := 1; attempt <= dbStartupAttempts; attempt++ {
+		ctx, cancel := context.WithTimeout(context.Background(), dbStartupTimeout)
+		db, err := store.New(ctx, dsn)
+		cancel()
+
+		if err == nil {
+			if attempt > 1 {
+				log.Printf("PostgreSQL connection succeeded for %s mode on attempt %d/%d.", mode, attempt, dbStartupAttempts)
+			}
+			return db, nil
+		}
+
+		lastErr = err
+		if attempt < dbStartupAttempts {
+			log.Printf("PostgreSQL not ready yet for %s mode (attempt %d/%d): %v", mode, attempt, dbStartupAttempts, err)
+			time.Sleep(dbStartupDelay)
+		}
+	}
+
+	return nil, lastErr
 }
 
 // ---------------------------------------------------------------------------

@@ -23,5 +23,21 @@
             {{end}}
         </nav>
     </div>
+        <div id="toastContainer" style="position:fixed; top:72px; right:18px; z-index:9999;"></div>
+        <script>
+            window.showToast = function(message, type = 'info', timeout = 4000) {
+                const c = document.getElementById('toastContainer');
+                const t = document.createElement('div');
+                t.textContent = message;
+                t.style.background = type === 'error' ? '#fee2e2' : (type === 'success' ? '#dcfce7' : '#eff6ff');
+                t.style.color = type === 'error' ? '#7f1d1d' : (type === 'success' ? '#065f46' : '#0f172a');
+                t.style.padding = '0.7rem 1rem';
+                t.style.borderRadius = '10px';
+                t.style.boxShadow = '0 6px 18px rgba(2,6,23,0.12)';
+                t.style.marginTop = '0.5rem';
+                c.appendChild(t);
+                setTimeout(()=>{ t.style.opacity = '0'; setTimeout(()=>c.removeChild(t), 300); }, timeout);
+            }
+        </script>
 </header>
 {{end}}

@@ -573,7 +573,7 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	reports, _, err := s.db.ListReports(r.Context(), claims.Subject, 5, 0)
+	reports, _, err := s.db.ListReports(r.Context(), claims.Subject, 5, 0, "", "", "")
 	if err != nil {
 		s.renderError(w, r, "Failed to load recent reports: "+err.Error())
 		return
@@ -604,7 +604,7 @@ func (s *Server) handleReportsList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	reports, total, err := s.db.ListReports(r.Context(), claims.UserID, 50, 0)
+	reports, total, err := s.db.ListReports(r.Context(), claims.UserID, 50, 0, "", "", "")
 	if err != nil {
 		s.renderError(w, r, "Failed to load reports.")
 		return

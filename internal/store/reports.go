@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -84,8 +85,9 @@ func (db *DB) GetReport(ctx context.Context, userID, reportID string) (*Report, 
 	return r, nil
 }
 
-// ListReports returns all reports for a user, newest first.
-func (db *DB) ListReports(ctx context.Context, userID string, limit, offset int) ([]Report, int, error) {
+// ListReports returns reports for a user with optional search/sort parameters.
+// q: search term applied to title (ILIKE). sortBy: created_at|title|sku_count. order: asc|desc.
+func (db *DB) ListReports(ctx context.Context, userID string, limit, offset int, q, sortBy, order string) ([]Report, int, error) {
 	if limit <= 0 {
 		limit = 20
 	}
@@ -95,20 +97,56 @@ func (db *DB) ListReports(ctx context.Context, userID string, limit, offset int)
 
 	// Get total count.
 	var total int
-	err := db.Pool.QueryRow(ctx,
-		`SELECT COUNT(*) FROM reports WHERE user_id = $1`, userID,
-	).Scan(&total)
-	if err != nil {
-		return nil, 0, fmt.Errorf("count reports: %w", err)
+	// Build count query with optional search term.
+	if q == "" {
+		err := db.Pool.QueryRow(ctx,
+			`SELECT COUNT(*) FROM reports WHERE user_id = $1`, userID,
+		).Scan(&total)
+		if err != nil {
+			return nil, 0, fmt.Errorf("count reports: %w", err)
+		}
+	} else {
+		like := "%" + q + "%"
+		err := db.Pool.QueryRow(ctx,
+			`SELECT COUNT(*) FROM reports WHERE user_id = $1 AND title ILIKE $2`, userID, like,
+		).Scan(&total)
+		if err != nil {
+			return nil, 0, fmt.Errorf("count reports: %w", err)
+		}
 	}
 
-	rows, err := db.Pool.Query(ctx,
-		`SELECT id, user_id, title, service_level, sim_runs, sim_weeks, sku_count, warnings, created_at
-		 FROM reports WHERE user_id = $1
-		 ORDER BY created_at DESC
-		 LIMIT $2 OFFSET $3`,
-		userID, limit, offset,
-	)
+	// Validate sort options.
+	validSort := map[string]string{"created_at": "created_at", "title": "title", "sku_count": "sku_count"}
+	col, ok := validSort[sortBy]
+	if !ok || col == "" {
+		col = "created_at"
+	}
+	ord := "DESC"
+	if strings.ToLower(order) == "asc" {
+		ord = "ASC"
+	}
+
+	// Build query with optional search term.
+	var rows pgx.Rows
+	var err error
+	if q == "" {
+		rows, err = db.Pool.Query(ctx,
+			fmt.Sprintf(`SELECT id, user_id, title, service_level, sim_runs, sim_weeks, sku_count, warnings, created_at
+			 FROM reports WHERE user_id = $1
+			 ORDER BY %s %s
+			 LIMIT $2 OFFSET $3`, col, ord),
+			userID, limit, offset,
+		)
+	} else {
+		like := "%" + q + "%"
+		rows, err = db.Pool.Query(ctx,
+			fmt.Sprintf(`SELECT id, user_id, title, service_level, sim_runs, sim_weeks, sku_count, warnings, created_at
+			 FROM reports WHERE user_id = $1 AND title ILIKE $2
+			 ORDER BY %s %s
+			 LIMIT $3 OFFSET $4`, col, ord),
+			userID, like, limit, offset,
+		)
+	}
 	if err != nil {
 		return nil, 0, fmt.Errorf("list reports: %w", err)
 	}

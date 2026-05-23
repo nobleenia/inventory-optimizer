@@ -143,7 +143,7 @@ func (db *DB) migrate(ctx context.Context) error {
 
 	`
 	db.Pool.Exec(ctx, `ALTER TABLE skus ADD COLUMN IF NOT EXISTS selling_price DOUBLE PRECISION NOT NULL DEFAULT 0;`)
-        db.Pool.Exec(ctx, `ALTER TABLE skus ADD COLUMN IF NOT EXISTS current_stock INTEGER NOT NULL DEFAULT 0;`)
-        _, err := db.Pool.Exec(ctx, ddl)
+	db.Pool.Exec(ctx, `ALTER TABLE skus ADD COLUMN IF NOT EXISTS current_stock INTEGER NOT NULL DEFAULT 0;`)
+	_, err := db.Pool.Exec(ctx, ddl)
 	return err
 }

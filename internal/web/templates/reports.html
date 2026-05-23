@@ -12,26 +12,43 @@
     <main class="container">
         <section class="reports-section">
             <div class="reports-header">
-                <h2>My Saved Reports</h2>
-                <a href="/upload" class="btn-primary" style="width:auto; padding:0.6rem 1.5rem;">+ New Analysis</a>
+                <h2>Saved Analyses</h2>
+                <div class="reports-controls">
+                    <input id="reportsSearch" placeholder="Search reports by title..." class="input" />
+                    <select id="reportsSort" class="input">
+                        <option value="created_at:desc">Newest</option>
+                        <option value="created_at:asc">Oldest</option>
+                        <option value="title:asc">Title A–Z</option>
+                        <option value="title:desc">Title Z–A</option>
+                        <option value="sku_count:desc">Most SKUs</option>
+                        <option value="sku_count:asc">Fewest SKUs</option>
+                    </select>
+                    <button id="compareBtn" class="btn-outline" style="display:none">Compare (0)</button>
+                    <a href="/upload" class="btn-secondary" style="padding:0.5rem 1rem;">Run Analysis</a>
+                </div>
             </div>
+
             <div id="reportsContainer">
                 <div class="reports-list" id="reportsListServer">
                 {{if .SavedReports}}
                     {{range .SavedReports}}
                     <div class="report-row">
-                        <div class="report-row-info">
-                            <a href="/reports/{{.ID}}" class="report-row-title">{{.Title}}</a>
-                            <div class="report-row-meta">
-                                <span>{{.SKUCount}} SKUs</span>
-                                <span>·</span>
-                                <span>Service level {{printf "%.0f" (mult .ServiceLevel 100)}}%</span>
-                                <span>·</span>
-                                <span>{{.CreatedAt.Format "Jan 2, 2006 at 15:04"}}</span>
+                        <div class="report-row-left">
+                            <label class="compare-checkbox"><input type="checkbox" data-id="{{.ID}}" class="compare-select"/> </label>
+                            <div class="report-row-info">
+                                <a href="/reports/{{.ID}}" class="report-row-title">{{.Title}}</a>
+                                <div class="report-row-meta">
+                                    <span>{{.SKUCount}} SKUs</span>
+                                    <span>·</span>
+                                    <span>Service level {{printf "%.0f" (mult .ServiceLevel 100)}}%</span>
+                                    <span>·</span>
+                                    <span>{{.CreatedAt.Format "Jan 2, 2006 at 15:04"}}</span>
+                                </div>
                             </div>
                         </div>
                         <div class="report-row-actions">
                             <a href="/reports/{{.ID}}" class="btn-secondary btn-sm">View</a>
+                            <a href="/reports/{{.ID}}" class="btn-outline btn-sm">Download</a>
                             <form action="/reports/{{.ID}}/delete" method="POST" class="inline-form"
                                   onsubmit="return confirm('Delete this report?');">
                                 <button type="submit" class="btn-outline btn-sm btn-danger-outline">Delete</button>
@@ -42,40 +59,116 @@
                 {{else}}
                     <div class="empty-state">
                         <span class="empty-icon">📊</span>
-                        <h3>No reports yet</h3>
-                        <p>Upload your CSV files to run your first inventory analysis.</p>
-                        <a href="/upload" class="btn-primary" style="width:auto; padding:0.75rem 2rem;">Run Analysis</a>
+                        <h3>No saved analyses yet</h3>
+                        <p>Saved reports are listed here so you can manage and re-run them later.</p>
+                        <a href="/upload" class="btn-primary" style="width:auto; padding:0.75rem 2rem;">Run your first analysis</a>
                     </div>
                 {{end}}
                 </div>
+
                 <div id="reportsListClient" style="display:none">
                     <!-- Client-side rendered reports will appear here -->
                 </div>
             </div>
+
             <script>
-                // Progressive enhancement: load via API for logged-in users to show loading skeleton
+                // Client-driven Reports management: search, sort, delete, compare
                 (function(){
-                    fetch('/api/v1/reports')
-                    .then(r => {
-                        if (!r.ok) return; // not logged in or no api access
-                        const list = document.getElementById('reportsListClient');
-                        document.getElementById('reportsListServer').style.display = 'none';
-                        list.style.display = 'block';
-                        list.innerHTML = '<div class="report-row"><div style="width:100%"><div class="skeleton skeleton-line" style="width:60%"></div><div class="skeleton skeleton-line" style="width:40%"></div></div></div>';
-                        return r.json();
-                    })
-                    .then(data => {
-                        if (!data) return;
-                        const list = document.getElementById('reportsListClient');
-                        list.innerHTML = '';
+                    const serverList = document.getElementById('reportsListServer');
+                    const clientList = document.getElementById('reportsListClient');
+                    const search = document.getElementById('reportsSearch');
+                    const sort = document.getElementById('reportsSort');
+                    const compareBtn = document.getElementById('compareBtn');
+                    let selected = new Set();
+
+                    function setCompareCount(){
+                        const n = selected.size;
+                        if(n > 0){
+                            compareBtn.style.display = 'inline-block';
+                            compareBtn.textContent = `Compare (${n})`;
+                        } else {
+                            compareBtn.style.display = 'none';
+                        }
+                    }
+
+                    function renderRows(data){
+                        serverList.style.display = 'none';
+                        clientList.style.display = 'block';
+                        clientList.innerHTML = '';
+                        if(!data || !data.reports || data.reports.length === 0){
+                            clientList.innerHTML = '<div class="empty-state"><span class="empty-icon">📊</span><h3>No saved analyses found</h3><p>Try running an analysis or adjust your search.</p><a href="/upload" class="btn-primary">Run your first analysis</a></div>';
+                            return;
+                        }
                         data.reports.forEach(r => {
                             const div = document.createElement('div');
                             div.className = 'report-row';
-                            div.innerHTML = `<div class="report-row-info"><a href="/reports/${r.id}" class="report-row-title">${r.title}</a><div class="report-row-meta"><span>${r.sku_count} SKUs</span> · <span>${new Date(r.created_at).toLocaleString()}</span></div></div><div class="report-row-actions"><a href="/reports/${r.id}" class="btn-secondary btn-sm">View</a></div>`;
-                            list.appendChild(div);
+                            div.innerHTML = `<div class="report-row-left"><label class="compare-checkbox"><input type="checkbox" data-id="${r.id}" class="compare-select"/></label><div class="report-row-info"><a href="/reports/${r.id}" class="report-row-title">${r.title}</a><div class="report-row-meta"><span>${r.sku_count} SKUs</span> · <span>${new Date(r.created_at).toLocaleString()}</span></div></div></div><div class="report-row-actions"><a href="/reports/${r.id}" class="btn-secondary btn-sm">View</a><a href="/reports/${r.id}" class="btn-outline btn-sm">Download</a><button class="btn-outline btn-sm btn-danger-outline delete-btn" data-id="${r.id}">Delete</button></div>`;
+                            clientList.appendChild(div);
                         });
-                    })
-                    .catch(()=>{});
+                        attachRowHandlers();
+                    }
+
+                    function attachRowHandlers(){
+                        document.querySelectorAll('.compare-select').forEach(cb => {
+                            cb.addEventListener('change', e => {
+                                const id = e.target.dataset.id;
+                                if(e.target.checked) selected.add(id); else selected.delete(id);
+                                // limit to two selections
+                                if(selected.size > 2){
+                                    // remove earliest selected
+                                    const it = selected.values(); it.next(); selected.delete(it.next().value);
+                                }
+                                // sync checkboxes
+                                document.querySelectorAll('.compare-select').forEach(c => c.checked = selected.has(c.dataset.id));
+                                setCompareCount();
+                            });
+                        });
+
+                        document.querySelectorAll('.delete-btn').forEach(btn => {
+                            btn.addEventListener('click', e => {
+                                const id = e.target.dataset.id;
+                                if(!confirm('Delete this report?')) return;
+                                fetch('/api/v1/reports/'+id, {method: 'DELETE'})
+                                .then(r => {
+                                    if(r.ok){
+                                        showToast('Report deleted');
+                                        // remove row
+                                        e.target.closest('.report-row').remove();
+                                    } else {
+                                        showToast('Failed to delete report', 'danger');
+                                    }
+                                }).catch(()=> showToast('Network error', 'danger'));
+                            });
+                        });
+                    }
+
+                    function load(){
+                        const q = encodeURIComponent(search.value || '');
+                        const s = (sort.value || 'created_at:desc').split(':');
+                        const url = `/api/v1/reports?q=${q}&sort=${s[0]}&order=${s[1]}`;
+                        clientList.style.display = 'block';
+                        clientList.innerHTML = '<div class="report-row"><div style="width:100%"><div class="skeleton skeleton-line" style="width:60%"></div><div class="skeleton skeleton-line" style="width:40%"></div></div></div>';
+                        fetch(url).then(r => r.ok ? r.json() : null).then(data => renderRows(data)).catch(()=>{ clientList.innerHTML = '<div class="empty-state"><p>Unable to load reports.</p></div>' });
+                    }
+
+                    search.addEventListener('input', debounce(load, 350));
+                    sort.addEventListener('change', load);
+                    compareBtn.addEventListener('click', ()=>{
+                        if(selected.size < 2){ showToast('Select two reports to compare'); return }
+                        const ids = Array.from(selected);
+                        // open both in new tabs side-by-side is left to the user; open two tabs
+                        window.open('/reports/'+ids[0], '_blank');
+                        window.open('/reports/'+ids[1], '_blank');
+                    });
+
+                    // attach handlers to server-rendered list if visible
+                    attachRowHandlers();
+                    // try to load client-side list when API available
+                    fetch('/api/v1/reports').then(r => { if(r.ok) load(); }).catch(()=>{});
+
+                    // helpers
+                    function debounce(fn, ms){ let t; return function(){ clearTimeout(t); t = setTimeout(()=>fn.apply(this, arguments), ms) }}
+                    function showToast(msg, kind){ if(window.showToast) window.showToast(msg, kind); else alert(msg) }
                 })();
             </script>
         </section>

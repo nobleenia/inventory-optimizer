@@ -2,15 +2,15 @@
 <header>
     <div class="container header-bar">
         <a href="/" class="header-link"><h1>📦 Inventory Optimizer</h1></a>
-        <button class="mobile-menu-btn" aria-label="Toggle menu" onclick="document.querySelector('.header-nav').classList.toggle('nav-open')">
+        <button class="mobile-menu-btn" type="button" aria-label="Toggle menu" aria-expanded="false" onclick="const nav = document.querySelector('.header-nav'); nav.classList.toggle('nav-open'); this.setAttribute('aria-expanded', nav.classList.contains('nav-open'))">
             ☰
         </button>
         <nav class="header-nav">
             {{if .IsLoggedIn}}
                 <span class="nav-user">{{.UserEmail}}</span>
                 <a href="/dashboard" class="btn-header">Dashboard</a>
-				<a href="/catalogue" class="btn-header" style="color: #ffc107; font-weight: bold;">⭐ Premium</a>
-                <a href="/records" class="btn-header" style="color: #ffc107; font-weight: bold;">⭐ Smart Records</a>
+				<a href="/catalogue" class="btn-header btn-header-accent">⭐ Premium</a>
+				<a href="/records" class="btn-header btn-header-accent">⭐ Smart Records</a>
                 <a href="/reports" class="btn-header">My Reports</a>
                 <a href="/upload" class="btn-header">New Analysis</a>
                 <a href="/logout" class="btn-header btn-outline-header">Logout</a>

@@ -5,21 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard · Inventory Optimizer</title>
     <link rel="stylesheet" href="/static/css/style.css">
-    <style>
-        .premium-section { margin-top: 2rem; background: #fffbf0; border: 1px solid #ffeeba; padding: 1.5rem; border-radius: 8px; }
-        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-top: 1rem; }
-        .abc-matrix { display: grid; grid-template-columns: auto 1fr 1fr 1fr; gap: 4px; text-align: center; }
-        .abc-matrix .header { font-weight: bold; background: #f8f9fa; padding: 0.5rem; }
-        .abc-matrix .cell { background: #fff; border: 1px solid #dee2e6; padding: 0.5rem; border-radius: 4px; min-height: 40px; display:flex; align-items:center; justify-content:center;}
-        .cell-AX { background-color: #d4edda; } /* High value, predictable */
-        .cell-CZ { background-color: #f8d7da; } /* Low value, erratic */
-        .budget-form { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
-        .budget-form input { flex: 1; padding: 0.5rem; }
-        table.analytics-table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
-        table.analytics-table th, table.analytics-table td { border-bottom: 1px solid #eee; padding: 0.5rem; text-align: left; }
-        .alert-box { background: #fff3cd; color: #856404; padding: 1rem; border-radius: 4px; margin-bottom: 1rem; border: 1px solid #ffeeba; }
-        .spinner { font-style: italic; color: #666; }
-    </style>
 </head>
 <body>
     {{template "nav" .}}
@@ -39,9 +24,9 @@
 
             <div class="grid-2">
                 <!-- Smart Restock / Budget -->
-                <div class="stat-card" style="text-align:left;">
+                <div class="stat-card stat-card-panel">
                     <h4>Smart Restock (Budget Optimizer)</h4>
-                    <p style="font-size:0.85em; margin-bottom:1rem;">Allocate a fixed budget across SKUs that urgently need reordering.</p>
+                    <p>Allocate a fixed budget across SKUs that urgently need reordering.</p>
                     <form class="budget-form" id="budgetForm">
                         <input type="number" id="budgetAmount" placeholder="Enter Budget $" required min="1">
                         <button type="submit" class="btn-primary">Optimize</button>
@@ -50,9 +35,9 @@
                 </div>
 
                 <!-- ABC/XYZ Matrix -->
-                <div class="stat-card" style="text-align:left;">
+                <div class="stat-card stat-card-panel">
                     <h4>ABC / XYZ Matrix</h4>
-                    <p style="font-size:0.85em; margin-bottom:1rem;">Classifying Value (A-C) vs Predictability (X-Z).</p>
+                    <p>Classifying Value (A-C) vs Predictability (X-Z).</p>
                     <div class="abc-matrix" id="abcMatrix">
                         <div class="header"></div>
                         <div class="header">X (Steady)</div>
@@ -79,7 +64,7 @@
         </section>
 
         <!-- Standard Dashboard -->
-        <section class="dashboard-stats" style="margin-top: 2rem;">
+        <section class="dashboard-stats">
             <div class="stat-card">
                 <span class="stat-label">Saved Reports</span>
                 <span class="stat-value">{{.TotalReports}}</span>
@@ -116,7 +101,7 @@
             {{else}}
                 <div class="empty-state">
                     <p>You haven't run any analyses yet.</p>
-                    <a href="/upload" class="btn-primary" style="margin-top: 1rem;">Run your first analysis</a>
+                    <a href="/upload" class="btn-primary">Run your first analysis</a>
                 </div>
             {{end}}
         </section>

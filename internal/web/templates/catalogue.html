@@ -77,6 +77,16 @@
             <!-- SKU List -->
             <div class="catalogue-list">
                 <h3>Your Products</h3>
+                <div style="display:flex; gap:1rem; align-items:center; margin-bottom:1rem;">
+                    <input id="skuSearch" type="search" placeholder="Search SKUs or filter..." style="flex:1; padding:0.6rem 0.9rem; border-radius:10px; border:1px solid var(--color-border);" />
+                    <select id="skuSort" style="padding:0.6rem 0.9rem; border-radius:10px; border:1px solid var(--color-border);">
+                        <option value="">Sort</option>
+                        <option value="sku_asc">SKU ↑</option>
+                        <option value="sku_desc">SKU ↓</option>
+                        <option value="stock_asc">Stock ↑</option>
+                        <option value="stock_desc">Stock ↓</option>
+                    </select>
+                </div>
                 <table>
                     <thead>
                         <tr>
@@ -93,6 +103,47 @@
                 </table>
             </div>
         </div>
+        
+        <!-- Catalogue Analytics: ABC/XYZ + Budget Optimizer -->
+        <section class="catalogue-analytics" style="margin-top:1.5rem;">
+            <div class="grid-2">
+                <div class="stat-card stat-card-panel">
+                    <h4>ABC / XYZ Matrix</h4>
+                    <p>Classifying Value (A-C) vs Predictability (X-Z).</p>
+                    <div class="abc-matrix" id="abcMatrix">
+                        <div class="header"></div>
+                        <div class="header">X (Steady)</div>
+                        <div class="header">Y (Variable)</div>
+                        <div class="header">Z (Erratic)</div>
+                        <!-- A -->
+                        <div class="header">A (High $)</div>
+                        <div class="cell cell-AX" id="cell-A-X">-</div>
+                        <div class="cell" id="cell-A-Y">-</div>
+                        <div class="cell" id="cell-A-Z">-</div>
+                        <!-- B -->
+                        <div class="header">B (Med $)</div>
+                        <div class="cell" id="cell-B-X">-</div>
+                        <div class="cell" id="cell-B-Y">-</div>
+                        <div class="cell" id="cell-B-Z">-</div>
+                        <!-- C -->
+                        <div class="header">C (Low $)</div>
+                        <div class="cell" id="cell-C-X">-</div>
+                        <div class="cell" id="cell-C-Y">-</div>
+                        <div class="cell cell-CZ" id="cell-C-Z">-</div>
+                    </div>
+                </div>
+
+                <div class="stat-card stat-card-panel">
+                    <h4>Smart Restock (Budget Optimizer)</h4>
+                    <p>Allocate a fixed budget across SKUs that urgently need reordering.</p>
+                    <form class="budget-form" id="budgetForm">
+                        <input type="number" id="budgetAmount" placeholder="Enter Budget $" required min="1">
+                        <button type="submit" class="btn-primary">Optimize</button>
+                    </form>
+                    <div id="budgetResult"><span class="spinner">Enter a budget to calculate</span></div>
+                </div>
+            </div>
+        </section>
     </main>
 
     <!-- Log Sales Modal -->
@@ -137,9 +188,18 @@
             setTimeout(() => alert.style.display = 'none', 5000);
         }
 
-        // Fetch SKUs
+        // Client-side cache and helpers
+        let skusCache = [];
+
+        function showLoadingSKUs() {
+            const tbody = document.getElementById('skuTableBody');
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:1rem; color:var(--color-muted)">Loading SKUs…</td></tr>';
+        }
+
+        // Fetch SKUs with loading state and cache
         async function fetchSKUs() {
             try {
+                showLoadingSKUs();
                 const res = await fetch('/api/v1/catalogue/skus');
                 if (!res.ok) {
                     if (res.status === 402 || res.status === 401) {
@@ -148,7 +208,10 @@
                     throw new Error("Failed to fetch SKUs");
                 }
                 const data = await res.json();
-                renderSKUs(data.skus || []);
+                skusCache = data.skus || [];
+                renderSKUs(filterAndSort(skusCache));
+                // Also fetch analytics data now that we have skus
+                fetchABCXYZ();
             } catch (err) {
                 showAlert(err.message, false);
             }
@@ -160,7 +223,7 @@
             tbody.innerHTML = '';
             
             if (skus.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4">No SKUs found. Add one to get started!</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5">No SKUs found. Add one to get started!</td></tr>';
                 return;
             }
 
@@ -179,6 +242,95 @@
                 tbody.appendChild(tr);
             });
         }
+
+        // Filtering & sorting
+        function filterAndSort(list) {
+            const q = document.getElementById('skuSearch').value.trim().toLowerCase();
+            const sort = document.getElementById('skuSort').value;
+            let out = list.slice();
+            if (q) {
+                out = out.filter(s => (s.sku_id || '').toLowerCase().includes(q));
+            }
+            if (sort) {
+                if (sort === 'sku_asc') out.sort((a,b)=>a.sku_id.localeCompare(b.sku_id));
+                if (sort === 'sku_desc') out.sort((a,b)=>b.sku_id.localeCompare(a.sku_id));
+                if (sort === 'stock_asc') out.sort((a,b)=>a.current_stock - b.current_stock);
+                if (sort === 'stock_desc') out.sort((a,b)=>b.current_stock - a.current_stock);
+            }
+            return out;
+        }
+
+        document.getElementById('skuSearch').addEventListener('input', () => renderSKUs(filterAndSort(skusCache)));
+        document.getElementById('skuSort').addEventListener('change', () => renderSKUs(filterAndSort(skusCache)));
+
+        // Fetch ABC/XYZ matrix
+        async function fetchABCXYZ() {
+            try {
+                const res = await fetch('/api/v1/catalogue/abc-xyz');
+                if (!res.ok) {
+                    // hide or show message depending on permissions
+                    if (res.status === 402 || res.status === 401) {
+                        document.getElementById('abcMatrix').innerHTML = '<p style="color:var(--color-muted)">Premium subscription required to view catalogue insights.</p>';
+                        return;
+                    }
+                    throw new Error('Failed to load catalogue analytics');
+                }
+                const data = await res.json();
+                if(!data || Object.keys(data).length === 0) return;
+                let counts = { 'A-X':0, 'A-Y':0, 'A-Z':0, 'B-X':0, 'B-Y':0, 'B-Z':0, 'C-X':0, 'C-Y':0, 'C-Z':0 };
+                Object.values(data).forEach(sku => {
+                    let key = sku.abc_class + '-' + sku.xyz_class;
+                    if(counts[key] !== undefined) counts[key]++;
+                });
+                for(let key in counts) {
+                    let el = document.getElementById('cell-' + key);
+                    if(el && counts[key] > 0) el.innerHTML = `<strong>${counts[key]}</strong>&nbsp;SKUs`;
+                    else if (el) el.innerHTML = '-';
+                }
+            } catch (err) {
+                console.log('ABC/XYZ load failed', err);
+            }
+        }
+
+        // Handle Budget Form
+        document.getElementById('budgetForm').addEventListener('submit', e => {
+            e.preventDefault();
+            const btn = e.target.querySelector('button');
+            btn.disabled = true;
+            const budget = parseFloat(document.getElementById('budgetAmount').value);
+            const resDiv = document.getElementById('budgetResult');
+            resDiv.innerHTML = '<span class="spinner">Calculating...</span>';
+
+            fetch('/api/v1/catalogue/budget-optimize', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({budget})
+            })
+            .then(r => r.json().then(data => ({status: r.status, body: data})))
+            .then(({status, body}) => {
+                btn.disabled = false;
+                if(status !== 200) {
+                    resDiv.innerHTML = `<div class="alert-box">Error: ${body.error || 'Check if you have run Auto-Analyze.'}</div>`;
+                    return;
+                }
+                if(!body || body.length === 0) {
+                    resDiv.innerHTML = '<p>No SKUs currently need reordering.</p>';
+                    return;
+                }
+                let html = `<table class="analytics-table"><tr><th>SKU</th><th>Order Qty</th><th>Subtotal</th></tr>`;
+                let totalCost = 0;
+                body.forEach(item => {
+                    html += `<tr><td>${item.sku_id}</td><td>${item.order_quantity}</td><td>$${item.cost.toFixed(2)}</td></tr>`;
+                    totalCost += item.cost;
+                });
+                html += `<tr><td colspan="2"><strong>Total Allocated</strong></td><td><strong>$${totalCost.toFixed(2)}</strong></td></tr></table>`;
+                resDiv.innerHTML = html;
+            })
+            .catch(err => {
+                btn.disabled = false;
+                resDiv.innerHTML = 'Failed to calculate.';
+            });
+        });
 
         // Add SKU
         document.getElementById('addSkuForm').addEventListener('submit', async function(e) {

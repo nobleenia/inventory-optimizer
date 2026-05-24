@@ -258,10 +258,13 @@ func (s *Server) handleAnalyze(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleListReports(w http.ResponseWriter, r *http.Request) {
 	uid, _ := userFromContext(r.Context())
 
+	q := r.URL.Query().Get("q")
+	sortBy := r.URL.Query().Get("sort")
+	order := r.URL.Query().Get("order")
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 
-	reports, total, err := s.db.ListReports(r.Context(), uid, limit, offset)
+	reports, total, err := s.db.ListReports(r.Context(), uid, limit, offset, q, sortBy, order)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "Failed to list reports")
 		return

@@ -5,31 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Premium SKU Catalogue · Inventory Optimizer</title>
     <link rel="stylesheet" href="/static/css/style.css">
-    <style>
-        .catalogue-container { display: flex; gap: 2rem; margin-top: 1rem; }
-        .catalogue-form { flex: 1; background: #fff; padding: 1.5rem; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        .catalogue-list { flex: 2; background: #fff; padding: 1.5rem; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        .form-row { margin-bottom: 1rem; }
-        .form-row label { display: block; margin-bottom: 0.5rem; font-weight: 500; }
-        .form-row input { width: 100%; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
-        table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
-        th, td { padding: 0.75rem; text-align: left; border-bottom: 1px solid #eee; }
-        th { background-color: #f8f9fa; font-weight: 600; }
-        .actions { display: flex; gap: 0.5rem; }
-        .btn-small { padding: 0.25rem 0.5rem; font-size: 0.875rem; border-radius: 4px; border: none; cursor: pointer; }
-        .btn-log-sales { background: #007bff; color: white; }
-        .btn-delete { background: #dc3545; color: white; }
-        #logSalesModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; z-index: 100; }
-        .modal-content { background: white; padding: 2rem; border-radius: 8px; width: 300px; }
-        .alert { padding: 1rem; border-radius: 4px; margin-bottom: 1rem; display: none; }
-        .alert-success { background: #d4edda; color: #155724; }
-        .alert-error { background: #f8d7da; color: #721c24; }
-    </style>
 </head>
 <body>
     {{template "nav" .}}
 
-    <main class="container">
+    <main class="container catalogue-page">
         <div class="dashboard-header">
             <h2>Premium SKU Catalogue</h2>
             <button id="btnAutoAnalyze" class="btn-primary">Auto-Analyze Catalogue</button>
@@ -37,82 +17,135 @@
         
         <div id="pageAlert" class="alert"></div>
 
-        <div class="catalogue-container">
+        <div class="catalogue-grid">
             <!-- Add New SKU Form -->
-            <div class="catalogue-form">
+            <div class="catalogue-panel">
                 <h3>Add New SKU</h3>
                 <form id="addSkuForm">
-                    <div class="form-row">
+                    <div class="catalogue-field">
                         <label for="sku_id">SKU Code</label>
                         <input type="text" id="sku_id" required placeholder="e.g., WIDGET-01">
                     </div>
-                    <div class="form-row">
+                    <div class="catalogue-field">
                         <label for="lead_time">Lead Time (Days)</label>
                         <input type="number" id="lead_time" required min="1" value="14">
                     </div>
-                    <div class="form-row">
+                    <div class="catalogue-field">
                         <label for="unit_cost">Unit Cost ($)</label>
                         <input type="number" id="unit_cost" required step="0.01" value="10.00">
                     </div>
-                    <div class="form-row">
+                    <div class="catalogue-field">
                         <label for="order_cost">Order Cost ($)</label>
                         <input type="number" id="order_cost" required step="0.01" value="50.00">
                     </div>
-                    <div class="form-row">
-                    <div class="form-row">
+                    <div class="catalogue-field">
                         <label for="current_stock">Current Stock</label>
                         <input type="number" id="current_stock" required min="0" value="0">
                     </div>
-					<div class="form-row">
+                    <div class="catalogue-field">
                         <label for="selling_price">Selling Price ($)</label>
                         <input type="number" id="selling_price" required min="0" step="0.01" value="20.00">
                     </div>
+                    <div class="catalogue-field">
                         <label for="holding_pct">Holding Cost (%)</label>
                         <input type="number" id="holding_pct" required step="0.01" value="0.20">
                     </div>
-                    <button type="submit" class="btn-primary" style="width: 100%;">Save SKU</button>
+                    <button type="submit" class="btn-primary">Save SKU</button>
                 </form>
             </div>
 
             <!-- SKU List -->
-            <div class="catalogue-list">
+            <div class="catalogue-panel">
                 <h3>Your Products</h3>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>SKU</th>
-                            <th>Cost</th>
-                            <th>Lead Time</th>
-                            <th>Current Stock</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="skuTableBody">
-                        <!-- Populated by JS -->
-                    </tbody>
-                </table>
+                <div class="catalogue-toolbar">
+                    <input id="skuSearch" type="search" placeholder="Search SKUs or filter..." />
+                    <select id="skuSort">
+                        <option value="">Sort</option>
+                        <option value="sku_asc">SKU ↑</option>
+                        <option value="sku_desc">SKU ↓</option>
+                        <option value="stock_asc">Stock ↑</option>
+                        <option value="stock_desc">Stock ↓</option>
+                    </select>
+                </div>
+                <div class="catalogue-table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>SKU</th>
+                                <th>Cost</th>
+                                <th>Lead Time</th>
+                                <th>Current Stock</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="skuTableBody">
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
+        
+        <!-- Catalogue Analytics: ABC/XYZ + Budget Optimizer -->
+        <section class="catalogue-analytics">
+            <div class="grid-2">
+                <div class="stat-card stat-card-panel">
+                    <h4>ABC / XYZ Matrix</h4>
+                    <p>Classifying Value (A-C) vs Predictability (X-Z).</p>
+                    <div class="abc-matrix" id="abcMatrix">
+                        <div class="header"></div>
+                        <div class="header">X (Steady)</div>
+                        <div class="header">Y (Variable)</div>
+                        <div class="header">Z (Erratic)</div>
+                        <!-- A -->
+                        <div class="header">A (High $)</div>
+                        <div class="cell cell-AX" id="cell-A-X">-</div>
+                        <div class="cell" id="cell-A-Y">-</div>
+                        <div class="cell" id="cell-A-Z">-</div>
+                        <!-- B -->
+                        <div class="header">B (Med $)</div>
+                        <div class="cell" id="cell-B-X">-</div>
+                        <div class="cell" id="cell-B-Y">-</div>
+                        <div class="cell" id="cell-B-Z">-</div>
+                        <!-- C -->
+                        <div class="header">C (Low $)</div>
+                        <div class="cell" id="cell-C-X">-</div>
+                        <div class="cell" id="cell-C-Y">-</div>
+                        <div class="cell cell-CZ" id="cell-C-Z">-</div>
+                    </div>
+                </div>
+
+                <div class="stat-card stat-card-panel">
+                    <h4>Smart Restock (Budget Optimizer)</h4>
+                    <p>Allocate a fixed budget across SKUs that urgently need reordering.</p>
+                    <form class="budget-form" id="budgetForm">
+                        <input type="number" id="budgetAmount" placeholder="Enter Budget $" required min="1">
+                        <button type="submit" class="btn-primary">Optimize</button>
+                    </form>
+                    <div id="budgetResult"><span class="spinner">Enter a budget to calculate</span></div>
+                </div>
+            </div>
+        </section>
     </main>
 
     <!-- Log Sales Modal -->
-    <div id="logSalesModal">
-        <div class="modal-content">
+    <div id="logSalesModal" class="catalogue-modal">
+        <div class="catalogue-modal-panel">
             <h3>Log Sales</h3>
             <p id="modalSkuLabel"></p>
             <form id="logSalesForm">
                 <input type="hidden" id="modalSkuId">
-                <div class="form-row">
+                <div class="catalogue-field">
                     <label for="sale_date">Date</label>
                     <input type="date" id="sale_date" required>
                 </div>
-                <div class="form-row">
+                <div class="catalogue-field">
                     <label for="sale_quantity">Quantity Sold</label>
                     <input type="number" id="sale_quantity" required min="1" value="1">
                 </div>
-                <div style="display: flex; gap: 1rem; margin-top: 1rem;">
-                    <button type="button" class="btn-secondary" onclick="closeModal()" style="flex: 1;">Cancel</button>
-                    <button type="submit" class="btn-primary" style="flex: 1;">Save Log</button>
+                <div class="btn-row">
+                    <button type="button" class="btn-secondary" onclick="closeModal()">Cancel</button>
+                    <button type="submit" class="btn-primary">Save Log</button>
                 </div>
             </form>
         </div>
@@ -128,8 +161,12 @@
         // Set today's date in modal by default
         document.getElementById('sale_date').valueAsDate = new Date();
 
-        // Helper to show alert
+        // Helper to show alert (delegates to global toast when available)
         function showAlert(msg, isSuccess) {
+            if (window.showToast) {
+                window.showToast(msg, isSuccess ? 'success' : 'error');
+                return;
+            }
             const alert = document.getElementById('pageAlert');
             alert.textContent = msg;
             alert.className = 'alert ' + (isSuccess ? 'alert-success' : 'alert-error');
@@ -137,9 +174,18 @@
             setTimeout(() => alert.style.display = 'none', 5000);
         }
 
-        // Fetch SKUs
+        // Client-side cache and helpers
+        let skusCache = [];
+
+        function showLoadingSKUs() {
+            const tbody = document.getElementById('skuTableBody');
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:1rem; color:var(--color-muted)">Loading SKUs…</td></tr>';
+        }
+
+        // Fetch SKUs with loading state and cache
         async function fetchSKUs() {
             try {
+                showLoadingSKUs();
                 const res = await fetch('/api/v1/catalogue/skus');
                 if (!res.ok) {
                     if (res.status === 402 || res.status === 401) {
@@ -148,7 +194,10 @@
                     throw new Error("Failed to fetch SKUs");
                 }
                 const data = await res.json();
-                renderSKUs(data.skus || []);
+                skusCache = data.skus || [];
+                renderSKUs(filterAndSort(skusCache));
+                // Also fetch analytics data now that we have skus
+                fetchABCXYZ();
             } catch (err) {
                 showAlert(err.message, false);
             }
@@ -160,7 +209,7 @@
             tbody.innerHTML = '';
             
             if (skus.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4">No SKUs found. Add one to get started!</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5">No SKUs found. Add one to get started!</td></tr>';
                 return;
             }
 
@@ -180,6 +229,95 @@
             });
         }
 
+        // Filtering & sorting
+        function filterAndSort(list) {
+            const q = document.getElementById('skuSearch').value.trim().toLowerCase();
+            const sort = document.getElementById('skuSort').value;
+            let out = list.slice();
+            if (q) {
+                out = out.filter(s => (s.sku_id || '').toLowerCase().includes(q));
+            }
+            if (sort) {
+                if (sort === 'sku_asc') out.sort((a,b)=>a.sku_id.localeCompare(b.sku_id));
+                if (sort === 'sku_desc') out.sort((a,b)=>b.sku_id.localeCompare(a.sku_id));
+                if (sort === 'stock_asc') out.sort((a,b)=>a.current_stock - b.current_stock);
+                if (sort === 'stock_desc') out.sort((a,b)=>b.current_stock - a.current_stock);
+            }
+            return out;
+        }
+
+        document.getElementById('skuSearch').addEventListener('input', () => renderSKUs(filterAndSort(skusCache)));
+        document.getElementById('skuSort').addEventListener('change', () => renderSKUs(filterAndSort(skusCache)));
+
+        // Fetch ABC/XYZ matrix
+        async function fetchABCXYZ() {
+            try {
+                const res = await fetch('/api/v1/catalogue/abc-xyz');
+                if (!res.ok) {
+                    // hide or show message depending on permissions
+                    if (res.status === 402 || res.status === 401) {
+                        document.getElementById('abcMatrix').innerHTML = '<p style="color:var(--color-muted)">Premium subscription required to view catalogue insights.</p>';
+                        return;
+                    }
+                    throw new Error('Failed to load catalogue analytics');
+                }
+                const data = await res.json();
+                if(!data || Object.keys(data).length === 0) return;
+                let counts = { 'A-X':0, 'A-Y':0, 'A-Z':0, 'B-X':0, 'B-Y':0, 'B-Z':0, 'C-X':0, 'C-Y':0, 'C-Z':0 };
+                Object.values(data).forEach(sku => {
+                    let key = sku.abc_class + '-' + sku.xyz_class;
+                    if(counts[key] !== undefined) counts[key]++;
+                });
+                for(let key in counts) {
+                    let el = document.getElementById('cell-' + key);
+                    if(el && counts[key] > 0) el.innerHTML = `<strong>${counts[key]}</strong>&nbsp;SKUs`;
+                    else if (el) el.innerHTML = '-';
+                }
+            } catch (err) {
+                console.log('ABC/XYZ load failed', err);
+            }
+        }
+
+        // Handle Budget Form
+        document.getElementById('budgetForm').addEventListener('submit', e => {
+            e.preventDefault();
+            const btn = e.target.querySelector('button');
+            btn.disabled = true;
+            const budget = parseFloat(document.getElementById('budgetAmount').value);
+            const resDiv = document.getElementById('budgetResult');
+            resDiv.innerHTML = '<span class="spinner">Calculating...</span>';
+
+            fetch('/api/v1/catalogue/budget-optimize', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({budget})
+            })
+            .then(r => r.json().then(data => ({status: r.status, body: data})))
+            .then(({status, body}) => {
+                btn.disabled = false;
+                if(status !== 200) {
+                    resDiv.innerHTML = `<div class="alert-box">Error: ${body.error || 'Check if you have run Auto-Analyze.'}</div>`;
+                    return;
+                }
+                if(!body || body.length === 0) {
+                    resDiv.innerHTML = '<p>No SKUs currently need reordering.</p>';
+                    return;
+                }
+                let html = `<table class="analytics-table"><tr><th>SKU</th><th>Order Qty</th><th>Subtotal</th></tr>`;
+                let totalCost = 0;
+                body.forEach(item => {
+                    html += `<tr><td>${item.sku_id}</td><td>${item.order_quantity}</td><td>$${item.cost.toFixed(2)}</td></tr>`;
+                    totalCost += item.cost;
+                });
+                html += `<tr><td colspan="2"><strong>Total Allocated</strong></td><td><strong>$${totalCost.toFixed(2)}</strong></td></tr></table>`;
+                resDiv.innerHTML = html;
+            })
+            .catch(err => {
+                btn.disabled = false;
+                resDiv.innerHTML = 'Failed to calculate.';
+            });
+        });
+
         // Add SKU
         document.getElementById('addSkuForm').addEventListener('submit', async function(e) {
             e.preventDefault();
@@ -189,8 +327,6 @@
                 unit_cost: parseFloat(document.getElementById('unit_cost').value),
                 order_cost: parseFloat(document.getElementById('order_cost').value),
                 holding_pct: parseFloat(document.getElementById('holding_pct').value),
-                current_stock: parseInt(document.getElementById('current_stock').value, 10),
-                selling_price: parseFloat(document.getElementById('selling_price').value),
                 current_stock: parseInt(document.getElementById('current_stock').value, 10),
                 selling_price: parseFloat(document.getElementById('selling_price').value)
             };

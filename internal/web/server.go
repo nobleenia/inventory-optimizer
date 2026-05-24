@@ -53,6 +53,14 @@ var templateFuncs = template.FuncMap{
 		}
 		return s
 	},
+	"dict": func(values ...interface{}) map[string]interface{} {
+		m := make(map[string]interface{})
+		for i := 0; i < len(values)-1; i += 2 {
+			key, _ := values[i].(string)
+			m[key] = values[i+1]
+		}
+		return m
+	},
 }
 
 // Server holds the HTTP server configuration and optional auth/db deps.
@@ -98,6 +106,7 @@ func NewServer(addr string, db *store.DB, authSvc *auth.Service) *Server {
 	s.mux.HandleFunc("GET /dashboard", s.handleDashboard)
 	s.mux.HandleFunc("GET /catalogue", s.handleCataloguePage)
 	s.mux.HandleFunc("GET /reports", s.handleReportsList)
+	s.mux.HandleFunc("GET /reports/compare", s.handleReportsCompare)
 	s.mux.HandleFunc("GET /reports/{id}", s.handleReportDetail)
 	s.mux.HandleFunc("POST /reports/{id}/delete", s.handleReportDelete)
 
@@ -108,6 +117,11 @@ func NewServer(addr string, db *store.DB, authSvc *auth.Service) *Server {
 	s.mux.HandleFunc("GET /api/v1/reports", s.handleAPIReportsList)
 	s.mux.HandleFunc("GET /api/v1/reports/{id}", s.handleAPIReportDetail)
 	s.mux.HandleFunc("DELETE /api/v1/reports/{id}", s.handleAPIReportDelete)
+	// Global search
+	s.mux.HandleFunc("GET /api/v1/search", s.handleAPISearch)
+	// Download endpoints for saved reports
+	s.mux.HandleFunc("GET /api/v1/reports/{id}/csv", s.handleAPIReportCSV)
+	s.mux.HandleFunc("GET /api/v1/reports/{id}/pdf", s.handleAPIReportPDF)
 
 	// Catalogue API
 	s.mux.HandleFunc("GET /api/v1/catalogue/skus", s.requirePremium(s.handleAPIGetSKUs))
@@ -230,6 +244,28 @@ func (s *Server) baseData(r *http.Request) map[string]interface{} {
 		d["UserEmail"] = claims.Email
 		d["IsLoggedIn"] = true
 	}
+	// Add current path and active flags for nav active-state styling
+	path := r.URL.Path
+	d["CurrentPath"] = path
+	d["ActiveDashboard"] = (path == "/dashboard")
+	d["ActiveCatalogue"] = strings.HasPrefix(path, "/catalogue")
+	d["ActiveRecords"] = strings.HasPrefix(path, "/records")
+	d["ActiveReports"] = strings.HasPrefix(path, "/reports")
+	d["ActiveUpload"] = (path == "/upload")
+	// Account status: guest | authenticated | premium
+	accountStatus := "guest"
+	if s.db == nil {
+		accountStatus = "guest"
+	} else if claims := s.currentUser(r); claims == nil {
+		accountStatus = "authenticated"
+	} else {
+		if sub, err := s.db.GetSubscription(r.Context(), claims.Subject); err == nil && sub != nil && sub.Status == "active" {
+			accountStatus = "premium"
+		} else {
+			accountStatus = "authenticated"
+		}
+	}
+	d["AccountStatus"] = accountStatus
 	return d
 }
 
@@ -551,7 +587,7 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	reports, _, err := s.db.ListReports(r.Context(), claims.Subject, 5, 0)
+	reports, _, err := s.db.ListReports(r.Context(), claims.Subject, 5, 0, "", "", "")
 	if err != nil {
 		s.renderError(w, r, "Failed to load recent reports: "+err.Error())
 		return
@@ -582,7 +618,7 @@ func (s *Server) handleReportsList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	reports, total, err := s.db.ListReports(r.Context(), claims.UserID, 50, 0)
+	reports, total, err := s.db.ListReports(r.Context(), claims.UserID, 50, 0, "", "", "")
 	if err != nil {
 		s.renderError(w, r, "Failed to load reports.")
 		return
@@ -656,6 +692,60 @@ func (s *Server) handleReportDelete(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/reports", http.StatusSeeOther)
 }
 
+func (s *Server) handleReportsCompare(w http.ResponseWriter, r *http.Request) {
+	claims := s.currentUser(r)
+	if claims == nil {
+		http.Redirect(w, r, "/login?redirect=/reports/compare", http.StatusSeeOther)
+		return
+	}
+	if s.db == nil {
+		http.Redirect(w, r, "/upload", http.StatusSeeOther)
+		return
+	}
+
+	idsParam := r.URL.Query().Get("ids")
+	if idsParam == "" {
+		s.renderError(w, r, "Please select two reports to compare.")
+		return
+	}
+	ids := strings.Split(idsParam, ",")
+	if len(ids) != 2 {
+		s.renderError(w, r, "Please select exactly two reports to compare.")
+		return
+	}
+
+	a, err := s.db.GetReport(r.Context(), claims.UserID, ids[0])
+	if err != nil {
+		s.renderError(w, r, "Failed to load first report.")
+		return
+	}
+	b, err := s.db.GetReport(r.Context(), claims.UserID, ids[1])
+	if err != nil {
+		s.renderError(w, r, "Failed to load second report.")
+		return
+	}
+
+	// Prepare previews (first 10 SKUs) to keep template simple.
+	var aPreview, bPreview []models.SKUReport
+	if len(a.Results) > 10 {
+		aPreview = a.Results[:10]
+	} else {
+		aPreview = a.Results
+	}
+	if len(b.Results) > 10 {
+		bPreview = b.Results[:10]
+	} else {
+		bPreview = b.Results
+	}
+
+	d := s.baseData(r)
+	d["ReportA"] = a
+	d["ReportB"] = b
+	d["ReportAPreview"] = aPreview
+	d["ReportBPreview"] = bPreview
+	s.render(w, "reports_compare.html", d)
+}
+
 // ---------------------------------------------------------------------------
 // Rendering helpers
 // ---------------------------------------------------------------------------
@@ -681,10 +771,7 @@ func (s *Server) handleCataloguePage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Assuming you want to pass Version or minimal template data.
-	data := map[string]interface{}{
-		"Version": "0.8.0", // Mock version or use dynamic
-	}
-
-	s.render(w, "catalogue.html", data)
+	// Use shared base data so nav/user state is consistent with other pages.
+	d := s.baseData(r)
+	s.render(w, "catalogue.html", d)
 }

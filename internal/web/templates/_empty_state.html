@@ -1,0 +1,12 @@
+{{define "empty_state"}}
+<div class="empty-state">
+    <div style="text-align:center; padding:1.25rem 0;">
+        <div style="font-size:2.25rem; margin-bottom:0.5rem">{{.Icon}}</div>
+        <h3 style="margin-bottom:0.25rem">{{.Title}}</h3>
+        <p style="color:var(--color-muted); margin-bottom:0.75rem">{{.Message}}</p>
+        {{if .CTA}}
+            <a href="{{.CTAHref}}" class="btn-primary">{{.CTALabel}}</a>
+        {{end}}
+    </div>
+</div>
+{{end}}

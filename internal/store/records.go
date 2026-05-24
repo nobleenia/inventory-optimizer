@@ -27,7 +27,7 @@ func (db *DB) SaveGeneratedRecord(ctx context.Context, record *GeneratedRecord) 
 }
 
 func (db *DB) GetGeneratedRecords(ctx context.Context, userID string) ([]GeneratedRecord, error) {
-	rows, err := db.Pool.Query(ctx, 
+	rows, err := db.Pool.Query(ctx,
 		"SELECT id, user_id, template_name, file_path, records_count, created_at FROM generated_records WHERE user_id = $1 ORDER BY created_at DESC", userID)
 	if err != nil {
 		return nil, fmt.Errorf("get generated records: %w", err)
@@ -47,7 +47,7 @@ func (db *DB) GetGeneratedRecords(ctx context.Context, userID string) ([]Generat
 
 func (db *DB) GetGeneratedRecord(ctx context.Context, userID, recordID string) (*GeneratedRecord, error) {
 	var r GeneratedRecord
-	err := db.Pool.QueryRow(ctx, 
+	err := db.Pool.QueryRow(ctx,
 		"SELECT id, user_id, template_name, file_path, records_count, created_at FROM generated_records WHERE user_id = $1 AND id = $2", userID, recordID).Scan(
 		&r.ID, &r.UserID, &r.TemplateName, &r.FilePath, &r.RecordsCount, &r.CreatedAt,
 	)

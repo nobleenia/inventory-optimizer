@@ -8,8 +8,9 @@
     <style>
         .premium-banner { background: #fffbf0; border: 1px solid #ffeeba; padding: 1rem; border-radius: 8px; margin-bottom: 2rem; }
         .template-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
-        .template-card { border: 1px solid #dee2e6; border-radius: 8px; padding: 1.5rem; background: #fff; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; }
-        .template-card:hover { transform: translateY(-3px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+    .template-card { border: 1px solid #dee2e6; border-radius: 8px; padding: 1.5rem; background: #fff; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; }
+    .template-card:hover { transform: translateY(-3px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+    .template-card.selected { border-color: #2563eb; box-shadow: 0 8px 24px rgba(37,99,235,0.12); transform: translateY(-4px); }
         .template-card h4 { margin-top: 0; color: #0056b3; }
         .template-card p { font-size: 0.9em; color: #6c757d; margin-bottom: 0; }
         
@@ -36,6 +37,13 @@
         </div>
 
         <h3>1. Select a Template</h3>
+        <div style="display:flex; gap:1rem; align-items:center; margin-bottom:1rem;">
+            <input id="templateSearch" type="search" placeholder="Search templates..." style="flex:1; padding:0.6rem 0.9rem; border-radius:10px; border:1px solid var(--color-border);" />
+            <select id="templateFilter" style="padding:0.6rem 0.9rem; border-radius:10px; border:1px solid var(--color-border); width:160px;">
+                <option value="">All</option>
+                <option value="has_summary">Has Summary</option>
+            </select>
+        </div>
         <div class="template-grid" id="templateGrid">
             <p>Loading templates...</p>
         </div>
@@ -91,18 +99,71 @@
 
     
     <script>
-        // Load templates
-        fetch('/api/v1/records/templates')
-            .then(res => res.json())
-            .then(templates => {
-                const select = document.getElementById('template_id');
-                templates.forEach(t => {
-                    const opt = document.createElement('option');
-                    opt.value = t.id;
-                    opt.textContent = t.name + ' - ' + t.description;
-                    select.appendChild(opt);
-                });
+        // Load templates and render clickable cards
+        let templatesCache = [];
+        function renderTemplateCards(list) {
+            const grid = document.getElementById('templateGrid');
+            grid.innerHTML = '';
+            if (!list || list.length === 0) {
+                grid.innerHTML = '<p style="color:var(--color-muted)">No templates available.</p>';
+                return;
+            }
+            list.forEach(t => {
+                const card = document.createElement('div');
+                card.className = 'template-card';
+                card.dataset.tid = t.ID;
+                card.innerHTML = `<h4>${t.Name || t.name}</h4><p>${t.Description || t.description}</p>`;
+                card.addEventListener('click', () => selectTemplate(t));
+                grid.appendChild(card);
             });
+        }
+
+        async function loadTemplates() {
+            const grid = document.getElementById('templateGrid');
+            grid.innerHTML = '<p>Loading templates...</p>';
+            try {
+                const res = await fetch('/api/v1/records/templates');
+                if (!res.ok) throw new Error('Failed to load templates');
+                const templates = await res.json();
+                templatesCache = templates;
+                renderTemplateCards(templatesCache);
+            } catch (err) {
+                grid.innerHTML = '<p style="color:var(--color-muted)">Failed to load templates.</p>';
+            }
+        }
+
+        document.getElementById('templateSearch').addEventListener('input', function(){
+            const q = this.value.trim().toLowerCase();
+            const filter = document.getElementById('templateFilter').value;
+            let out = templatesCache.slice();
+            if (q) out = out.filter(t => (t.Name||t.name).toLowerCase().includes(q) || (t.Description||t.description).toLowerCase().includes(q));
+            if (filter === 'has_summary') out = out.filter(t => t.HasSummary || t.has_summary);
+            renderTemplateCards(out);
+        });
+        document.getElementById('templateFilter').addEventListener('change', function(){ document.getElementById('templateSearch').dispatchEvent(new Event('input')); });
+
+        function selectTemplate(tmpl) {
+            // mark selected card
+            document.querySelectorAll('.template-card').forEach(c=>c.classList.remove('selected'));
+            const card = document.querySelector(`.template-card[data-tid='${tmpl.ID}']`);
+            if (card) card.classList.add('selected');
+
+            document.getElementById('selectedTemplateId').value = tmpl.ID;
+            document.getElementById('builderTitle').textContent = tmpl.Name || tmpl.name;
+            document.getElementById('builderDesc').textContent = tmpl.Description || tmpl.description;
+            // Populate columns list
+            const columnsList = document.getElementById('columnsList');
+            columnsList.innerHTML = '';
+            (tmpl.Columns || tmpl.Columns || []).forEach((c, idx) => {
+                const div = document.createElement('div');
+                div.className = 'column-item';
+                const header = c.Header || c.header || c;
+                div.innerHTML = `<label><input type="checkbox" name="columns" value="${header}" checked> ${header}</label>`;
+                columnsList.appendChild(div);
+            });
+            document.getElementById('builderSection').style.display = 'block';
+            window.scrollTo({ top: document.getElementById('builderSection').offsetTop - 80, behavior: 'smooth' });
+        }
 
         // Load History
         function loadHistory() {
@@ -133,6 +194,7 @@
         }
         
         // Initial load
+        loadTemplates();
         loadHistory();
 
         // Handle Download newly generated
@@ -143,8 +205,8 @@
             const columns = formData.getAll('columns');
             
             const payload = {
-                template_id: formData.get('template_id'),
-                prefill: formData.get('prefill') === 'on',
+                template_id: formData.get('template_id') || document.getElementById('selectedTemplateId').value,
+                prefill: formData.get('prefill') === 'on' || document.getElementById('prefillCatalogue').checked,
                 columns: columns
             };
 

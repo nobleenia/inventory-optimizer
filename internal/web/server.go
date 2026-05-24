@@ -771,10 +771,7 @@ func (s *Server) handleCataloguePage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Assuming you want to pass Version or minimal template data.
-	data := map[string]interface{}{
-		"Version": "0.8.0", // Mock version or use dynamic
-	}
-
-	s.render(w, "catalogue.html", data)
+	// Use shared base data so nav/user state is consistent with other pages.
+	d := s.baseData(r)
+	s.render(w, "catalogue.html", d)
 }

@@ -50,6 +50,10 @@
                             <a href="/reports/{{.ID}}" class="btn-secondary btn-sm">View</a>
                             <a href="/api/v1/reports/{{.ID}}/csv" class="btn-outline btn-sm">CSV</a>
                             <a href="/api/v1/reports/{{.ID}}/pdf" class="btn-outline btn-sm">PDF</a>
+                            <div style="display:flex; gap:0.5rem; align-items:center">
+                                <div class="tag-list" data-id="{{.ID}}" role="list">{{range .Tags}}<span class="tag" role="listitem">{{.}}</span>{{end}}</div>
+                                <button class="btn-sm btn-outline edit-tags" data-id="{{.ID}}">Edit tags</button>
+                            </div>
                             <form action="/reports/{{.ID}}/delete" method="POST" class="inline-form"
                                   onsubmit="return confirm('Delete this report?');">
                                 <button type="submit" class="btn-outline btn-sm btn-danger-outline">Delete</button>
@@ -64,6 +68,20 @@
 
                 <div id="reportsListClient" style="display:none">
                     <!-- Client-side rendered reports will appear here -->
+                </div>
+            </div>
+
+            <!-- Tag editor modal -->
+            <div id="tagModal" class="modal" aria-hidden="true" role="dialog" aria-modal="true" style="display:none">
+                <div class="modal-backdrop"></div>
+                <div class="modal-panel" role="document">
+                    <h3>Edit Tags</h3>
+                    <p class="muted">Enter comma-separated tags for this report.</p>
+                    <input id="tagInput" type="text" placeholder="e.g. seasonal, clearance" style="width:100%; padding:0.6rem; margin-bottom:0.6rem; border:1px solid var(--color-border); border-radius:8px" />
+                    <div style="display:flex; gap:0.5rem; justify-content:flex-end">
+                        <button id="tagCancel" class="btn-outline">Cancel</button>
+                        <button id="tagSave" class="btn-primary">Save</button>
+                    </div>
                 </div>
             </div>
 
@@ -111,7 +129,6 @@
                                 if(e.target.checked) selected.add(id); else selected.delete(id);
                                 // limit to two selections
                                 if(selected.size > 2){
-                                    // remove earliest selected
                                     const it = selected.values(); it.next(); selected.delete(it.next().value);
                                 }
                                 // sync checkboxes
@@ -128,7 +145,6 @@
                                 .then(r => {
                                     if(r.ok){
                                         showToast('Report deleted');
-                                        // remove row
                                         e.target.closest('.report-row').remove();
                                     } else {
                                         showToast('Failed to delete report', 'danger');
@@ -136,6 +152,35 @@
                                 }).catch(()=> showToast('Network error', 'danger'));
                             });
                         });
+
+                        // edit tags handler (server list and client list)
+                            // modal-based tag editor
+                            let editingReportId = '';
+                            const modal = document.getElementById('tagModal');
+                            const tagInput = document.getElementById('tagInput');
+                            const tagSave = document.getElementById('tagSave');
+                            const tagCancel = document.getElementById('tagCancel');
+                            function openTagModal(id){
+                                editingReportId = id;
+                                const container = document.querySelector('.tag-list[data-id="'+id+'"]');
+                                const existing = container ? Array.from(container.querySelectorAll('.tag')).map(t=>t.textContent) : [];
+                                tagInput.value = existing.join(', ');
+                                modal.style.display = 'flex'; modal.setAttribute('aria-hidden','false'); tagInput.focus();
+                            }
+                            function closeTagModal(){ editingReportId = ''; modal.style.display='none'; modal.setAttribute('aria-hidden','true'); }
+                            document.querySelectorAll('.edit-tags').forEach(btn => btn.addEventListener('click', e => openTagModal(e.target.dataset.id)));
+                            tagCancel.addEventListener('click', ()=> closeTagModal());
+                            tagSave.addEventListener('click', ()=>{
+                                const id = editingReportId; if(!id) return closeTagModal();
+                                const tags = tagInput.value.split(',').map(s=>s.trim()).filter(Boolean);
+                                fetch('/api/v1/reports/'+id+'/tags', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({tags})}).then(r=>{
+                                    if(r.ok){
+                                        showToast('Tags updated');
+                                        const container = document.querySelector('.tag-list[data-id="'+id+'"]'); if(container){ container.innerHTML=''; tags.forEach(t=>{ const el = document.createElement('span'); el.className='tag'; el.setAttribute('role','listitem'); el.textContent = t; container.appendChild(el); }); }
+                                    } else { showToast('Failed to update tags','danger'); }
+                                    closeTagModal();
+                                }).catch(()=>{ showToast('Network error', 'danger'); closeTagModal(); });
+                            });
                     }
 
                     function load(){
@@ -157,6 +202,7 @@
 
                     // attach handlers to server-rendered list if visible
                     attachRowHandlers();
+
                     // try to load client-side list when API available
                     fetch('/api/v1/reports').then(r => { if(r.ok) load(); }).catch(()=>{});
 

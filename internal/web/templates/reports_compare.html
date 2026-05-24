@@ -69,6 +69,63 @@
                 </div>
             </div>
 
+                <div class="compare-summary" aria-live="polite">
+                    <h3>Summary</h3>
+                    <div id="compareChartWrap" style="max-width:600px; margin-bottom:1rem">
+                        <canvas id="compareChart" width="600" height="160" aria-label="Comparison chart showing total annual costs"></canvas>
+                    </div>
+                    <div id="compareTotals" class="compare-totals"></div>
+                    <h4>Top deltas</h4>
+                    <div id="deltaTableWrap">Loading…</div>
+                </div>
+
+            </section>
+        </main>
+
+        <script>
+            (function(){
+                // parse ids from query
+                const qs = new URLSearchParams(window.location.search);
+                const ids = (qs.get('ids')||'').split(',').map(s=>s.trim()).filter(Boolean);
+                if(ids.length !== 2){ document.getElementById('deltaTableWrap').textContent = 'Please select two reports to compare.'; return; }
+                const url = '/api/v1/reports/compare?ids=' + encodeURIComponent(ids.join(','));
+                fetch(url).then(r=> r.ok? r.json(): null).then(data=>{
+                    if(!data) { document.getElementById('deltaTableWrap').textContent = 'Comparison failed.'; return }
+                    const summary = data.summary || {};
+                    const percent = data.percent_change || 0;
+                    document.getElementById('compareTotals').innerHTML = `<p>Total cost A: ${summary.total_cost_a.toFixed(2)} · Total cost B: ${summary.total_cost_b.toFixed(2)} · Change: ${percent.toFixed(2)}%</p>`;
+
+                    // draw simple bar chart
+                    const canvas = document.getElementById('compareChart');
+                    const ctx = canvas.getContext('2d');
+                    const a = summary.total_cost_a || 0; const b = summary.total_cost_b || 0;
+                    const max = Math.max(a,b,1);
+                    ctx.clearRect(0,0,canvas.width,canvas.height);
+                    // bars
+                    const pad = 40; const w = canvas.width - pad*2; const h = canvas.height - 40;
+                    const aw = w*0.4; const bw = w*0.4;
+                    ctx.fillStyle = '#4A90E2'; ctx.fillRect(pad, 20 + (h*(1 - a/max)), aw, h*(a/max));
+                    ctx.fillStyle = '#50E3C2'; ctx.fillRect(pad + aw + 20, 20 + (h*(1 - b/max)), bw, h*(b/max));
+                    ctx.fillStyle='#333'; ctx.font='12px sans-serif'; ctx.fillText('A', pad + aw/2 -6, canvas.height - 6); ctx.fillText('B', pad + aw + 20 + bw/2 -6, canvas.height -6);
+
+                    // build delta table (sorted)
+                    const rows = data.rows || [];
+                    rows.sort((x,y)=> Math.abs(y.delta.cost) - Math.abs(x.delta.cost));
+                    const top = rows.slice(0,20);
+                    const table = document.createElement('table');
+                    table.innerHTML = '<thead><tr><th>SKU</th><th>Cost Δ</th><th>EOQ Δ</th><th>Safety Δ</th><th>Reorder Δ</th></tr></thead>';
+                    const tb = document.createElement('tbody');
+                    top.forEach(r=>{
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `<td>${r.sku}</td><td>${r.delta.cost.toFixed(2)}</td><td>${r.delta.eoq.toFixed(0)}</td><td>${r.delta.safety.toFixed(0)}</td><td>${r.delta.reorder.toFixed(0)}</td>`;
+                        tb.appendChild(tr);
+                    });
+                    table.appendChild(tb);
+                    const wrap = document.getElementById('deltaTableWrap'); wrap.innerHTML=''; wrap.appendChild(table);
+                }).catch(err=>{ document.getElementById('deltaTableWrap').textContent = 'Error computing comparison.'; console.error(err); });
+            })();
+        </script>
+
         </section>
     </main>
 

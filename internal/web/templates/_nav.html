@@ -2,16 +2,23 @@
 <header>
     <div class="container header-bar">
         <a href="/" class="header-link"><h1>📦 Inventory Optimizer</h1></a>
+        <div class="header-tools">
+            <div class="global-search" role="search" aria-label="Global search">
+                <input id="globalSearchInput" placeholder="Search SKUs, reports, records..." autocomplete="off" aria-label="Search" />
+                <div id="globalSearchDropdown" class="search-dropdown" style="display:none" aria-hidden="true"></div>
+            </div>
+            {{if .IsLoggedIn}}
+            <div class="nav-identity">
+                <span class="nav-user">{{.UserEmail}}</span>
+                <span class="user-status status-{{.AccountStatus}}">{{upper .AccountStatus}}</span>
+            </div>
+            {{end}}
+        </div>
         <button class="mobile-menu-btn" type="button" aria-label="Toggle menu" aria-expanded="false" onclick="const nav = document.querySelector('.header-nav'); nav.classList.toggle('nav-open'); this.setAttribute('aria-expanded', nav.classList.contains('nav-open'))">
             ☰
         </button>
         <nav class="header-nav">
-            <div class="global-search">
-                <input id="globalSearchInput" placeholder="Search SKUs, reports, records..." autocomplete="off" />
-                <div id="globalSearchDropdown" class="search-dropdown" style="display:none"></div>
-            </div>
                 {{if .IsLoggedIn}}
-                <span class="nav-user">{{.UserEmail}}</span>
                 <a href="/dashboard" class="btn-header {{if .ActiveDashboard}}active{{end}}">Dashboard</a>
                 <a href="/catalogue" title="Premium analytics and tools (requires subscription)" class="btn-header btn-header-accent {{if .ActiveCatalogue}}active{{end}}">Catalogue</a>
                 <a href="/records" title="Generate structured spreadsheets and templates (premium)" class="btn-header btn-header-accent {{if .ActiveRecords}}active{{end}}">Smart Records</a>
@@ -22,12 +29,10 @@
                 <a href="/upload" class="btn-header">Try Free</a>
                 <a href="/login" class="btn-header">Login</a>
                 <a href="/register" class="btn-header btn-primary-sm">Sign Up</a>
-            {{else}}
-                <a href="/upload" class="btn-header">Get Started</a>
             {{end}}
         </nav>
     </div>
-        <div id="toastContainer" style="position:fixed; top:72px; right:18px; z-index:9999;"></div>
+        <div id="toastContainer" style="position:fixed; top:72px; right:18px; z-index:9999;" aria-live="polite" role="region"></div>
         <script src="/static/js/ui.js"></script>
         <script>
             // initialize global search on page load

@@ -78,6 +78,7 @@ func (db *DB) migrate(ctx context.Context) error {
 		sku_count     INTEGER NOT NULL DEFAULT 0,
 		warnings      JSONB NOT NULL DEFAULT '[]',
 		results       JSONB NOT NULL DEFAULT '[]',
+		tags          JSONB NOT NULL DEFAULT '[]',
 		created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 	);
 
@@ -144,6 +145,18 @@ func (db *DB) migrate(ctx context.Context) error {
 	`
 	db.Pool.Exec(ctx, `ALTER TABLE skus ADD COLUMN IF NOT EXISTS selling_price DOUBLE PRECISION NOT NULL DEFAULT 0;`)
 	db.Pool.Exec(ctx, `ALTER TABLE skus ADD COLUMN IF NOT EXISTS current_stock INTEGER NOT NULL DEFAULT 0;`)
+
+	// Ensure reports.tags exists for newer code paths
+	db.Pool.Exec(ctx, `ALTER TABLE reports ADD COLUMN IF NOT EXISTS tags JSONB NOT NULL DEFAULT '[]';`)
+
+	// Saved filters table for persisting user filter sets
+	db.Pool.Exec(ctx, `CREATE TABLE IF NOT EXISTS saved_filters (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		name TEXT NOT NULL,
+		params JSONB NOT NULL DEFAULT '{}',
+		created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+	);`)
 	_, err := db.Pool.Exec(ctx, ddl)
 	return err
 }

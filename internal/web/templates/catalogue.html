@@ -5,31 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Premium SKU Catalogue · Inventory Optimizer</title>
     <link rel="stylesheet" href="/static/css/style.css">
-    <style>
-        .catalogue-container { display: flex; gap: 2rem; margin-top: 1rem; }
-        .catalogue-form { flex: 1; background: #fff; padding: 1.5rem; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        .catalogue-list { flex: 2; background: #fff; padding: 1.5rem; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        .form-row { margin-bottom: 1rem; }
-        .form-row label { display: block; margin-bottom: 0.5rem; font-weight: 500; }
-        .form-row input { width: 100%; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
-        table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
-        th, td { padding: 0.75rem; text-align: left; border-bottom: 1px solid #eee; }
-        th { background-color: #f8f9fa; font-weight: 600; }
-        .actions { display: flex; gap: 0.5rem; }
-        .btn-small { padding: 0.25rem 0.5rem; font-size: 0.875rem; border-radius: 4px; border: none; cursor: pointer; }
-        .btn-log-sales { background: #007bff; color: white; }
-        .btn-delete { background: #dc3545; color: white; }
-        #logSalesModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; z-index: 100; }
-        .modal-content { background: white; padding: 2rem; border-radius: 8px; width: 300px; }
-        .alert { padding: 1rem; border-radius: 4px; margin-bottom: 1rem; display: none; }
-        .alert-success { background: #d4edda; color: #155724; }
-        .alert-error { background: #f8d7da; color: #721c24; }
-    </style>
 </head>
 <body>
     {{template "nav" .}}
 
-    <main class="container">
+    <main class="container catalogue-page">
         <div class="dashboard-header">
             <h2>Premium SKU Catalogue</h2>
             <button id="btnAutoAnalyze" class="btn-primary">Auto-Analyze Catalogue</button>
@@ -37,49 +17,49 @@
         
         <div id="pageAlert" class="alert"></div>
 
-        <div class="catalogue-container">
+        <div class="catalogue-grid">
             <!-- Add New SKU Form -->
-            <div class="catalogue-form">
+            <div class="catalogue-panel">
                 <h3>Add New SKU</h3>
                 <form id="addSkuForm">
-                    <div class="form-row">
+                    <div class="catalogue-field">
                         <label for="sku_id">SKU Code</label>
                         <input type="text" id="sku_id" required placeholder="e.g., WIDGET-01">
                     </div>
-                    <div class="form-row">
+                    <div class="catalogue-field">
                         <label for="lead_time">Lead Time (Days)</label>
                         <input type="number" id="lead_time" required min="1" value="14">
                     </div>
-                    <div class="form-row">
+                    <div class="catalogue-field">
                         <label for="unit_cost">Unit Cost ($)</label>
                         <input type="number" id="unit_cost" required step="0.01" value="10.00">
                     </div>
-                    <div class="form-row">
+                    <div class="catalogue-field">
                         <label for="order_cost">Order Cost ($)</label>
                         <input type="number" id="order_cost" required step="0.01" value="50.00">
                     </div>
-                    <div class="form-row">
-                    <div class="form-row">
+                    <div class="catalogue-field">
                         <label for="current_stock">Current Stock</label>
                         <input type="number" id="current_stock" required min="0" value="0">
                     </div>
-					<div class="form-row">
+                    <div class="catalogue-field">
                         <label for="selling_price">Selling Price ($)</label>
                         <input type="number" id="selling_price" required min="0" step="0.01" value="20.00">
                     </div>
+                    <div class="catalogue-field">
                         <label for="holding_pct">Holding Cost (%)</label>
                         <input type="number" id="holding_pct" required step="0.01" value="0.20">
                     </div>
-                    <button type="submit" class="btn-primary" style="width: 100%;">Save SKU</button>
+                    <button type="submit" class="btn-primary">Save SKU</button>
                 </form>
             </div>
 
             <!-- SKU List -->
-            <div class="catalogue-list">
+            <div class="catalogue-panel">
                 <h3>Your Products</h3>
-                <div style="display:flex; gap:1rem; align-items:center; margin-bottom:1rem;">
-                    <input id="skuSearch" type="search" placeholder="Search SKUs or filter..." style="flex:1; padding:0.6rem 0.9rem; border-radius:10px; border:1px solid var(--color-border);" />
-                    <select id="skuSort" style="padding:0.6rem 0.9rem; border-radius:10px; border:1px solid var(--color-border);">
+                <div class="catalogue-toolbar">
+                    <input id="skuSearch" type="search" placeholder="Search SKUs or filter..." />
+                    <select id="skuSort">
                         <option value="">Sort</option>
                         <option value="sku_asc">SKU ↑</option>
                         <option value="sku_desc">SKU ↓</option>
@@ -87,25 +67,27 @@
                         <option value="stock_desc">Stock ↓</option>
                     </select>
                 </div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>SKU</th>
-                            <th>Cost</th>
-                            <th>Lead Time</th>
-                            <th>Current Stock</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="skuTableBody">
-                        <!-- Populated by JS -->
-                    </tbody>
-                </table>
+                <div class="catalogue-table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>SKU</th>
+                                <th>Cost</th>
+                                <th>Lead Time</th>
+                                <th>Current Stock</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="skuTableBody">
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
         
         <!-- Catalogue Analytics: ABC/XYZ + Budget Optimizer -->
-        <section class="catalogue-analytics" style="margin-top:1.5rem;">
+        <section class="catalogue-analytics">
             <div class="grid-2">
                 <div class="stat-card stat-card-panel">
                     <h4>ABC / XYZ Matrix</h4>
@@ -147,23 +129,23 @@
     </main>
 
     <!-- Log Sales Modal -->
-    <div id="logSalesModal">
-        <div class="modal-content">
+    <div id="logSalesModal" class="catalogue-modal">
+        <div class="catalogue-modal-panel">
             <h3>Log Sales</h3>
             <p id="modalSkuLabel"></p>
             <form id="logSalesForm">
                 <input type="hidden" id="modalSkuId">
-                <div class="form-row">
+                <div class="catalogue-field">
                     <label for="sale_date">Date</label>
                     <input type="date" id="sale_date" required>
                 </div>
-                <div class="form-row">
+                <div class="catalogue-field">
                     <label for="sale_quantity">Quantity Sold</label>
                     <input type="number" id="sale_quantity" required min="1" value="1">
                 </div>
-                <div style="display: flex; gap: 1rem; margin-top: 1rem;">
-                    <button type="button" class="btn-secondary" onclick="closeModal()" style="flex: 1;">Cancel</button>
-                    <button type="submit" class="btn-primary" style="flex: 1;">Save Log</button>
+                <div class="btn-row">
+                    <button type="button" class="btn-secondary" onclick="closeModal()">Cancel</button>
+                    <button type="submit" class="btn-primary">Save Log</button>
                 </div>
             </form>
         </div>
@@ -345,8 +327,6 @@
                 unit_cost: parseFloat(document.getElementById('unit_cost').value),
                 order_cost: parseFloat(document.getElementById('order_cost').value),
                 holding_pct: parseFloat(document.getElementById('holding_pct').value),
-                current_stock: parseInt(document.getElementById('current_stock').value, 10),
-                selling_price: parseFloat(document.getElementById('selling_price').value),
                 current_stock: parseInt(document.getElementById('current_stock').value, 10),
                 selling_price: parseFloat(document.getElementById('selling_price').value)
             };

@@ -138,6 +138,10 @@ func (s *Server) handleAPIGetSKUs(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if out == nil {
+		out = []store.SKU{}
+	}
+
 	s.sendJSON(w, http.StatusOK, map[string]interface{}{"skus": out})
 }
 

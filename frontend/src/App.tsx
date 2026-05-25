@@ -50,6 +50,7 @@ type Session = {
   free_trial_active: boolean;
   premium_expired: boolean;
   trial_expires_at?: string | null;
+  user_id?: string;
   user_email?: string;
   preferred_currency?: string;
   country_code?: string;
@@ -140,6 +141,16 @@ type AnalysisNotice = {
   reportId: string | null;
   completedAt: string;
   elapsedMs: number;
+};
+
+type ActivityEvent = {
+  id: string;
+  kind: string;
+  title: string;
+  description: string;
+  entity_type: string;
+  entity_id: string;
+  created_at: string;
 };
 
 type AppNotification = {
@@ -759,15 +770,42 @@ function StatusPage({ title, message, actions }: { title: string; message: strin
   );
 }
 
-function EmptyState({ icon, title, message, actions }: { icon?: ReactNode; title: string; message: string; actions?: ReactNode }) {
+function EmptyState({ icon, title, message, hint, actions }: { icon?: ReactNode; title: string; message: string; hint?: string; actions?: ReactNode }) {
   return (
     <div className="empty-state">
       {icon && <div className="empty-state__icon">{icon}</div>}
       <h2 className="card__title">{title}</h2>
       <p className="muted">{message}</p>
+      {hint && <p className="empty-state__hint">Next: {hint}</p>}
       {actions && <div className="toolbar__group">{actions}</div>}
     </div>
   );
+}
+
+function activityIcon(kind: string) {
+  switch (kind) {
+    case 'analysis':
+      return <BarChart3 size={16} />;
+    case 'generated_record':
+      return <Layers3 size={16} />;
+    case 'sku_edit':
+      return <Package size={16} />;
+    default:
+      return <Sparkles size={16} />;
+  }
+}
+
+function activityHref(event: ActivityEvent) {
+  if (event.entity_type === 'report') {
+    return `/reports/${event.entity_id}`;
+  }
+  if (event.entity_type === 'generated_record') {
+    return '/records';
+  }
+  if (event.entity_type === 'sku') {
+    return `/catalogue/${encodeURIComponent(event.entity_id)}`;
+  }
+  return '';
 }
 
 function Header() {
@@ -995,6 +1033,18 @@ function DashboardPage() {
   const [deletingReportId, setDeletingReportId] = useState('');
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [activity, setActivity] = useState<ActivityEvent[]>([]);
+  const [dashboardReady, setDashboardReady] = useState(false);
+  const [walkthroughDismissed, setWalkthroughDismissed] = useState(false);
+  const walkthroughKey = session.user_id ? `inventory-optimizer-walkthrough-dismissed:${session.user_id}` : '';
+
+  useEffect(() => {
+    if (!walkthroughKey) {
+      setWalkthroughDismissed(false);
+      return;
+    }
+    setWalkthroughDismissed(window.localStorage.getItem(walkthroughKey) === '1');
+  }, [walkthroughKey]);
 
   useEffect(() => {
     if (!session.logged_in) {
@@ -1003,6 +1053,8 @@ function DashboardPage() {
       setLatestReportDetail(null);
       setNotifications([]);
       setUnreadNotifications(0);
+      setActivity([]);
+      setDashboardReady(false);
       return;
     }
 
@@ -1020,10 +1072,11 @@ function DashboardPage() {
     let mounted = true;
     const loadDashboard = async () => {
       try {
-        const [reportsData, skusData, notificationData] = await Promise.all([
+        const [reportsData, skusData, notificationData, activityData] = await Promise.all([
           apiFetch<{ reports: ReportSummary[] }>('/api/v1/reports?limit=1000'),
           apiFetch<{ skus: Sku[] }>('/api/v1/catalogue/skus'),
           apiFetch<NotificationListResponse>('/api/v1/notifications?limit=6'),
+          apiFetch<{ activity: ActivityEvent[] }>('/api/v1/activity?limit=8'),
         ]);
 
         if (!mounted) {
@@ -1035,6 +1088,7 @@ function DashboardPage() {
         setSkus(skusData.skus ?? []);
         setNotifications(notificationData.notifications ?? []);
         setUnreadNotifications(notificationData.unread_count ?? 0);
+        setActivity(activityData.activity ?? []);
 
         if (nextReports[0]) {
           const detail = await apiFetch<ReportDetail>(`/api/v1/reports/${nextReports[0].id}`);
@@ -1047,6 +1101,10 @@ function DashboardPage() {
       } catch (value) {
         if (mounted) {
           setError((value as Error).message);
+        }
+      } finally {
+        if (mounted) {
+          setDashboardReady(true);
         }
       }
     };
@@ -1107,6 +1165,22 @@ function DashboardPage() {
     }
   };
 
+  const dismissWalkthrough = () => {
+    if (walkthroughKey) {
+      window.localStorage.setItem(walkthroughKey, '1');
+    }
+    setWalkthroughDismissed(true);
+  };
+
+  const showWalkthrough = dashboardReady && !error && !walkthroughDismissed && reports.length === 0 && skus.length === 0 && activity.length === 0;
+
+  const firstRunSteps = [
+    { title: '1. Upload your files', text: 'Start on Upload and send in sales history plus SKU parameters.' },
+    { title: '2. Run analysis', text: 'The engine calculates reorder points, EOQ, and simulated annual cost.' },
+    { title: '3. Review the report', text: 'Open My Reports to inspect the saved analysis and compare results.' },
+    { title: '4. Unlock premium tools', text: 'Use the catalogue, records, notifications, and scheduling once you sign in.' },
+  ];
+
   return (
     <div className="page stack">
       <section className="hero">
@@ -1147,6 +1221,36 @@ function DashboardPage() {
                 Go to My Reports
               </Link>
               {analysisNotice.reportId && <Link className="button button--ghost" to={`/reports/${analysisNotice.reportId}`}>Open saved report</Link>}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {showWalkthrough && (
+        <section className="card" style={{ border: '1px solid rgba(15, 118, 110, 0.18)', background: 'linear-gradient(135deg, rgba(255, 248, 240, 0.92), rgba(237, 247, 244, 0.96))' }}>
+          <div className="card__body stack">
+            <div className="toolbar">
+              <div>
+                <p className="eyebrow">First run</p>
+                <h2 className="card__title">Get to value in four steps</h2>
+              </div>
+              <button className="button button--ghost button--small" type="button" onClick={dismissWalkthrough}>
+                Dismiss walkthrough
+              </button>
+            </div>
+            <div className="grid-2">
+              {firstRunSteps.map((step) => (
+                <article key={step.title} className="card" style={{ border: '1px solid rgba(15, 118, 110, 0.10)' }}>
+                  <div className="card__body">
+                    <div className="badge badge--teal">{step.title}</div>
+                    <p className="muted" style={{ marginTop: '0.75rem' }}>{step.text}</p>
+                  </div>
+                </article>
+              ))}
+            </div>
+            <div className="toolbar__group">
+              <Link className="button button--primary" to="/upload">Start with upload</Link>
+              <Link className="button button--ghost" to="/subscribe">See premium tools</Link>
             </div>
           </div>
         </section>
@@ -1242,6 +1346,62 @@ function DashboardPage() {
         </section>
       )}
 
+      {session.logged_in && (
+        <section className="card">
+          <div className="card__body stack">
+            <div className="toolbar">
+              <div>
+                <p className="eyebrow">Recent activity</p>
+                <h2 className="card__title">What changed recently</h2>
+              </div>
+              <span className="badge badge--stone">{activity.length} event{activity.length === 1 ? '' : 's'}</span>
+            </div>
+
+            {activity.length ? (
+              <div className="stack">
+                {activity.map((event) => {
+                  const href = activityHref(event);
+                  const icon = activityIcon(event.kind);
+                  const content = (
+                    <div className="card" style={{ border: '1px solid rgba(15, 118, 110, 0.12)' }}>
+                      <div className="card__body">
+                        <div className="toolbar">
+                          <div className="toolbar__group" style={{ gap: '0.65rem' }}>
+                            <span className="badge badge--teal">{icon}</span>
+                            <div>
+                              <div className="card__title">{event.title}</div>
+                              <div className="card__meta">{formatDate(event.created_at)} · {event.kind.replaceAll('_', ' ')}</div>
+                            </div>
+                          </div>
+                          {href ? <ArrowRight size={18} /> : <span className="badge badge--stone">Activity</span>}
+                        </div>
+                        <p className="muted" style={{ marginTop: '0.65rem' }}>{event.description}</p>
+                      </div>
+                    </div>
+                  );
+
+                  return href ? (
+                    <Link key={event.id} to={href} style={{ display: 'block' }}>
+                      {content}
+                    </Link>
+                  ) : (
+                    <div key={event.id}>{content}</div>
+                  );
+                })}
+              </div>
+            ) : (
+              <EmptyState
+                icon={<Sparkles size={40} />}
+                title="No activity yet"
+                message="Run an analysis, edit a SKU, or generate a Smart Record to populate this timeline."
+                hint="Upload your first CSVs, then come back here to see the change history."
+                actions={<button className="button button--primary" type="button" onClick={() => navigate('/upload')}>Run your first analysis</button>}
+              />
+            )}
+          </div>
+        </section>
+      )}
+
       {error && <div className="card"><div className="card__body muted">{error}</div></div>}
 
       {!session.logged_in && (
@@ -1292,6 +1452,7 @@ function DashboardPage() {
               icon={<BarChart3 size={44} />}
               title="You haven’t run any analyses yet"
               message="Upload sales and parameter files to generate your first live analysis."
+              hint="Use the Upload button above, then review the saved report from Dashboard."
               actions={<button className="button button--primary" type="button" onClick={() => navigate('/upload')}>Run your first analysis</button>}
             />
           )}
@@ -1735,7 +1896,7 @@ function CataloguePage() {
                   {!visibleSkus.length && (
                     <tr>
                       <td colSpan={5}>
-                        <div className="empty">No SKUs match this filter.</div>
+                        <div className="empty">No SKUs match this filter. Clear the search or add a SKU to continue.</div>
                       </td>
                     </tr>
                   )}
@@ -2481,6 +2642,7 @@ function RecordsPage() {
               icon={<Layers3 size={40} />}
               title="No sheets generated yet"
               message="Select a template and generate your first workbook to see download history here."
+              hint="Choose a template above, then click Generate Excel Sheet to create the first record."
               actions={<button className="button button--primary" type="button" onClick={() => selectedTemplate && generate(selectedTemplate)} disabled={!selectedTemplate}>Generate first sheet</button>}
             />
           )}
@@ -2648,6 +2810,7 @@ function ReportsPage() {
               icon={<BarChart3 size={40} />}
               title="No saved analyses yet"
               message="Run an analysis to save a report here and unlock compare and download actions."
+              hint="Upload CSVs from the dashboard or the Upload page to create your first saved report."
               actions={<button className="button button--primary" type="button" onClick={() => navigate('/upload')}>Run your first analysis</button>}
             />
           )}

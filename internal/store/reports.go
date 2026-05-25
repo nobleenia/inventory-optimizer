@@ -62,6 +62,18 @@ func (db *DB) CreateReport(ctx context.Context, r *Report) error {
 	if err != nil {
 		return fmt.Errorf("create report: %w", err)
 	}
+	countSuffix := "s"
+	if r.SKUCount == 1 {
+		countSuffix = ""
+	}
+	_ = db.RecordActivity(ctx, &ActivityEvent{
+		UserID:      r.UserID,
+		Kind:        "analysis",
+		Title:       "Analysis saved",
+		Description: fmt.Sprintf("%d SKU%s analysed with a service level target of %.0f%%", r.SKUCount, countSuffix, r.ServiceLevel*100),
+		EntityType:  "report",
+		EntityID:    r.ID,
+	})
 	return nil
 }
 

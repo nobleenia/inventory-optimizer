@@ -150,6 +150,7 @@ func NewServer(addr string, db *store.DB, authSvc *auth.Service) *Server {
 	// Download endpoints for saved reports
 	s.mux.HandleFunc("GET /api/v1/reports/{id}/csv", s.handleAPIReportCSV)
 	s.mux.HandleFunc("GET /api/v1/reports/{id}/pdf", s.handleAPIReportPDF)
+	s.mux.HandleFunc("GET /api/v1/activity", s.handleAPIActivity)
 
 	// Notification API.
 	s.mux.HandleFunc("GET /api/v1/notifications", s.handleAPINotifications)

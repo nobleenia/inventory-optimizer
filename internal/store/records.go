@@ -23,6 +23,14 @@ func (db *DB) SaveGeneratedRecord(ctx context.Context, record *GeneratedRecord) 
 	if err != nil {
 		return fmt.Errorf("insert generated record: %w", err)
 	}
+	_ = db.RecordActivity(ctx, &ActivityEvent{
+		UserID:      record.UserID,
+		Kind:        "generated_record",
+		Title:       "Smart record generated",
+		Description: fmt.Sprintf("%s produced %d rows", record.TemplateName, record.RecordsCount),
+		EntityType:  "generated_record",
+		EntityID:    record.ID,
+	})
 	return nil
 }
 

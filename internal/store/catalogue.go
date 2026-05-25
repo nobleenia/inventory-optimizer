@@ -54,6 +54,14 @@ func (db *DB) CreateSKU(ctx context.Context, sku *SKU) error {
 	if err != nil {
 		return fmt.Errorf("create/update sku: %w", err)
 	}
+	_ = db.RecordActivity(ctx, &ActivityEvent{
+		UserID:      sku.UserID,
+		Kind:        "sku_edit",
+		Title:       "SKU saved",
+		Description: fmt.Sprintf("SKU %s was created or updated", sku.SKUID),
+		EntityType:  "sku",
+		EntityID:    sku.SKUID,
+	})
 	return nil
 }
 
@@ -80,6 +88,14 @@ func (db *DB) DeleteSKU(ctx context.Context, userID, skuID string) error {
 	if err != nil {
 		return fmt.Errorf("delete sku: %w", err)
 	}
+	_ = db.RecordActivity(ctx, &ActivityEvent{
+		UserID:      userID,
+		Kind:        "sku_edit",
+		Title:       "SKU deleted",
+		Description: fmt.Sprintf("SKU %s was removed from the catalogue", skuID),
+		EntityType:  "sku",
+		EntityID:    skuID,
+	})
 	return nil
 }
 
@@ -187,6 +203,14 @@ func (db *DB) RecordSale(ctx context.Context, userID, skuID string, quantity int
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit sale transaction: %w", err)
 	}
+	_ = db.RecordActivity(ctx, &ActivityEvent{
+		UserID:      userID,
+		Kind:        "sku_edit",
+		Title:       "Sale logged",
+		Description: fmt.Sprintf("%s sold %d units", skuID, quantity),
+		EntityType:  "sku",
+		EntityID:    skuID,
+	})
 
 	return sku, nil
 }
@@ -210,6 +234,14 @@ func (db *DB) RecordReplenishment(ctx context.Context, userID, skuID string, qua
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit replenishment transaction: %w", err)
 	}
+	_ = db.RecordActivity(ctx, &ActivityEvent{
+		UserID:      userID,
+		Kind:        "sku_edit",
+		Title:       "Stock replenished",
+		Description: fmt.Sprintf("%s replenished by %d units", skuID, quantity),
+		EntityType:  "sku",
+		EntityID:    skuID,
+	})
 
 	return sku, nil
 }

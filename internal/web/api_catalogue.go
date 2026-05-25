@@ -421,6 +421,7 @@ func (s *Server) handleAPIAutoAnalyze(w http.ResponseWriter, r *http.Request) {
 
 	if err := s.db.CreateReport(r.Context(), dbReport); err == nil {
 		response["saved_report_id"] = dbReport.ID
+		_ = s.enqueueReplenishmentNotifications(r.Context(), claims.Subject, dbReport.ID, reports)
 	}
 
 	s.sendJSON(w, http.StatusOK, response)

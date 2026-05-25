@@ -83,16 +83,18 @@ type Server struct {
 	assets fs.FS
 	db     *store.DB     // nil = no database (guest-only mode)
 	auth   *auth.Service // nil = no auth
+	mailer Mailer
 }
 
 // NewServer creates a configured server ready to ListenAndServe.
 // Pass nil for db/authSvc to run in guest-only mode (no auth, no saved reports).
 func NewServer(addr string, db *store.DB, authSvc *auth.Service) *Server {
 	s := &Server{
-		Addr: addr,
-		mux:  http.NewServeMux(),
-		db:   db,
-		auth: authSvc,
+		Addr:   addr,
+		mux:    http.NewServeMux(),
+		db:     db,
+		auth:   authSvc,
+		mailer: newMailerFromEnv(),
 	}
 
 	appFS, err := fs.Sub(content, "static/app")
@@ -149,6 +151,12 @@ func NewServer(addr string, db *store.DB, authSvc *auth.Service) *Server {
 	s.mux.HandleFunc("GET /api/v1/reports/{id}/csv", s.handleAPIReportCSV)
 	s.mux.HandleFunc("GET /api/v1/reports/{id}/pdf", s.handleAPIReportPDF)
 
+	// Notification API.
+	s.mux.HandleFunc("GET /api/v1/notifications", s.handleAPINotifications)
+	s.mux.HandleFunc("POST /api/v1/notifications/{id}/read", s.handleAPIMarkNotificationRead)
+	s.mux.HandleFunc("GET /api/v1/notification-settings", s.requirePremium(s.handleAPINotificationSettings))
+	s.mux.HandleFunc("PUT /api/v1/notification-settings", s.requirePremium(s.handleAPIUpdateNotificationSettings))
+
 	// Catalogue API
 	s.mux.HandleFunc("GET /api/v1/catalogue/skus/{id}", s.requirePremium(s.handleAPIGetSKUDetail))
 	s.mux.HandleFunc("GET /api/v1/catalogue/skus", s.requirePremium(s.handleAPIGetSKUs))
@@ -201,6 +209,9 @@ func (s *Server) Start() error {
 	}
 	log.Printf("Starting web server on %s [%s mode]\n", s.Addr, mode)
 	log.Printf("Open http://localhost%s in your browser.\n", s.Addr)
+	if s.db != nil {
+		go s.startNotificationWorker(context.Background())
+	}
 
 	// Wrap mux with CORS middleware
 	handler := s.corsMiddleware(s.mux)

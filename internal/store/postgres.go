@@ -177,6 +177,27 @@ func (db *DB) migrate(ctx context.Context) error {
 		params JSONB NOT NULL DEFAULT '{}',
 		created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 	);`)
+	db.Pool.Exec(ctx, `CREATE TABLE IF NOT EXISTS notification_settings (
+		user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+		enabled BOOLEAN NOT NULL DEFAULT false,
+		frequency TEXT NOT NULL DEFAULT 'daily',
+		scheduled_time TEXT NOT NULL DEFAULT '09:00',
+		email_override TEXT NOT NULL DEFAULT '',
+		timezone TEXT NOT NULL DEFAULT 'UTC',
+		last_sent_at TIMESTAMPTZ,
+		updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+	);`)
+	db.Pool.Exec(ctx, `CREATE TABLE IF NOT EXISTS notifications (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		kind TEXT NOT NULL DEFAULT 'replenishment',
+		title TEXT NOT NULL,
+		body TEXT NOT NULL,
+		report_id TEXT NOT NULL DEFAULT '',
+		read_at TIMESTAMPTZ,
+		created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+	);`)
+	db.Pool.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_notifications_user_created_at ON notifications(user_id, created_at DESC);`)
 	_, err := db.Pool.Exec(ctx, ddl)
 	return err
 }

@@ -142,6 +142,32 @@ type AnalysisNotice = {
   elapsedMs: number;
 };
 
+type AppNotification = {
+  id: string;
+  kind: string;
+  title: string;
+  body: string;
+  report_id: string;
+  read_at?: string | null;
+  created_at: string;
+};
+
+type NotificationSettings = {
+  user_id: string;
+  enabled: boolean;
+  frequency: 'daily' | 'weekly';
+  scheduled_time: string;
+  email_override: string;
+  timezone: string;
+  last_sent_at?: string | null;
+  updated_at: string;
+};
+
+type NotificationListResponse = {
+  notifications: AppNotification[];
+  unread_count: number;
+};
+
 type AnalysisOverlayState = {
   phase: 'loading' | 'complete';
   message: string;
@@ -967,12 +993,16 @@ function DashboardPage() {
   const [analysisNotice, setAnalysisNotice] = useState<AnalysisNotice | null>(null);
   const [latestReportDetail, setLatestReportDetail] = useState<ReportDetail | null>(null);
   const [deletingReportId, setDeletingReportId] = useState('');
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
 
   useEffect(() => {
     if (!session.logged_in) {
       setReports([]);
       setSkus([]);
       setLatestReportDetail(null);
+      setNotifications([]);
+      setUnreadNotifications(0);
       return;
     }
 
@@ -990,9 +1020,10 @@ function DashboardPage() {
     let mounted = true;
     const loadDashboard = async () => {
       try {
-        const [reportsData, skusData] = await Promise.all([
+        const [reportsData, skusData, notificationData] = await Promise.all([
           apiFetch<{ reports: ReportSummary[] }>('/api/v1/reports?limit=1000'),
           apiFetch<{ skus: Sku[] }>('/api/v1/catalogue/skus'),
+          apiFetch<NotificationListResponse>('/api/v1/notifications?limit=6'),
         ]);
 
         if (!mounted) {
@@ -1002,6 +1033,8 @@ function DashboardPage() {
         const nextReports = reportsData.reports ?? [];
         setReports(nextReports);
         setSkus(skusData.skus ?? []);
+        setNotifications(notificationData.notifications ?? []);
+        setUnreadNotifications(notificationData.unread_count ?? 0);
 
         if (nextReports[0]) {
           const detail = await apiFetch<ReportDetail>(`/api/v1/reports/${nextReports[0].id}`);
@@ -1061,6 +1094,16 @@ function DashboardPage() {
       setError((value as Error).message);
     } finally {
       setDeletingReportId('');
+    }
+  };
+
+  const markNotificationRead = async (notificationId: string) => {
+    try {
+      await apiFetch(`/api/v1/notifications/${notificationId}/read`, { method: 'POST' });
+      setNotifications((current) => current.map((item) => (item.id === notificationId ? { ...item, read_at: item.read_at ?? new Date().toISOString() } : item)));
+      setUnreadNotifications((current) => Math.max(0, current - 1));
+    } catch (value) {
+      setError((value as Error).message);
     }
   };
 
@@ -1152,6 +1195,49 @@ function DashboardPage() {
               <Link className="button button--secondary" to={latestReportDetail.id ? `/reports/${latestReportDetail.id}` : '/reports'}>Review latest report</Link>
               <Link className="button button--ghost" to="/catalogue">Check catalogue</Link>
             </div>
+          </div>
+        </section>
+      )}
+
+      {session.logged_in && (
+        <section className="card">
+          <div className="card__body stack">
+            <div className="toolbar">
+              <div>
+                <p className="eyebrow">Notification center</p>
+                <h2 className="card__title">Recent replenishment alerts</h2>
+              </div>
+              <span className={`badge ${unreadNotifications ? 'badge--amber' : 'badge--teal'}`}>
+                {unreadNotifications ? `${unreadNotifications} unread` : 'All read'}
+              </span>
+            </div>
+
+            {notifications.length ? (
+              <div className="stack">
+                {notifications.map((notification) => (
+                  <div key={notification.id} className="card" style={{ border: notification.read_at ? '1px solid rgba(15, 118, 110, 0.12)' : '1px solid rgba(220, 38, 38, 0.14)', background: notification.read_at ? 'rgba(255,255,255,0.86)' : 'linear-gradient(135deg, rgba(254, 242, 242, 0.92), rgba(255, 251, 235, 0.95))' }}>
+                    <div className="card__body">
+                      <div className="toolbar">
+                        <div>
+                          <div className="card__title">{notification.title}</div>
+                          <div className="card__meta">{formatDate(notification.created_at)} · {notification.kind}</div>
+                        </div>
+                        {notification.read_at ? (
+                          <span className="badge badge--stone">Read</span>
+                        ) : (
+                          <button className="button button--ghost button--small" type="button" onClick={() => markNotificationRead(notification.id)}>
+                            Mark read
+                          </button>
+                        )}
+                      </div>
+                      <p className="muted" style={{ marginTop: '0.65rem' }}>{notification.body}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="muted">Your notification center is quiet right now. New replenishment alerts will appear here and in email.</p>
+            )}
           </div>
         </section>
       )}
@@ -3280,6 +3366,90 @@ function SubscriptionPage() {
   const { session } = useSession();
   const checkoutUrl = BILLING_CHECKOUT_URL.trim();
   const recommendedPlatform = 'Paddle';
+  const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>({
+    user_id: '',
+    enabled: false,
+    frequency: 'daily',
+    scheduled_time: '09:00',
+    email_override: '',
+    timezone: 'UTC',
+    updated_at: '',
+  });
+  const [settingsStatus, setSettingsStatus] = useState('');
+  const [settingsLoading, setSettingsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!session.logged_in || (session.account_status !== 'trial' && session.account_status !== 'premium')) {
+      return;
+    }
+
+    let mounted = true;
+    setSettingsLoading(true);
+    apiFetch<NotificationSettings>('/api/v1/notification-settings')
+      .then((value) => {
+        if (mounted) {
+          setNotificationSettings({
+            user_id: value.user_id,
+            enabled: value.enabled,
+            frequency: value.frequency || 'daily',
+            scheduled_time: value.scheduled_time || '09:00',
+            email_override: value.email_override || '',
+            timezone: value.timezone || 'UTC',
+            last_sent_at: value.last_sent_at || null,
+            updated_at: value.updated_at || '',
+          });
+        }
+      })
+      .catch((value) => {
+        if (mounted) {
+          setSettingsStatus((value as Error).message);
+        }
+      })
+      .finally(() => {
+        if (mounted) {
+          setSettingsLoading(false);
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [session.account_status, session.logged_in]);
+
+  const saveNotificationSettings = async (event: FormEvent) => {
+    event.preventDefault();
+    setSettingsLoading(true);
+    setSettingsStatus('');
+
+    try {
+      const value = await apiFetch<NotificationSettings>('/api/v1/notification-settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          enabled: notificationSettings.enabled,
+          frequency: notificationSettings.frequency,
+          scheduled_time: notificationSettings.scheduled_time,
+          email_override: notificationSettings.email_override,
+        }),
+      });
+
+      setNotificationSettings({
+        user_id: value.user_id,
+        enabled: value.enabled,
+        frequency: value.frequency || 'daily',
+        scheduled_time: value.scheduled_time || '09:00',
+        email_override: value.email_override || '',
+        timezone: value.timezone || 'UTC',
+        last_sent_at: value.last_sent_at || null,
+        updated_at: value.updated_at || '',
+      });
+      setSettingsStatus('Notification schedule saved.');
+    } catch (value) {
+      setSettingsStatus((value as Error).message);
+    } finally {
+      setSettingsLoading(false);
+    }
+  };
 
   return (
     <div className="page stack">
@@ -3344,6 +3514,78 @@ function SubscriptionPage() {
           </div>
         </article>
       </section>
+
+      {session.logged_in && (session.account_status === 'trial' || session.account_status === 'premium') && (
+        <section className="card">
+          <div className="card__body stack">
+            <div className="toolbar">
+              <div>
+                <p className="eyebrow">Schedule settings</p>
+                <h2 className="card__title">Premium replenishment notifications</h2>
+              </div>
+              <span className="badge badge--teal">Premium only</span>
+            </div>
+            <p className="muted">Choose when the backend job runner should email your replenishment alerts and keep the notification center in sync.</p>
+
+            <form className="stack" onSubmit={saveNotificationSettings}>
+              <label className="field" style={{ width: 'fit-content', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span className="field__label">Enable alert emails</span>
+                <input
+                  type="checkbox"
+                  checked={notificationSettings.enabled}
+                  onChange={(event) => setNotificationSettings((current) => ({ ...current, enabled: event.target.checked }))}
+                />
+              </label>
+
+              <div className="grid-2">
+                <Field label="Frequency">
+                  <select
+                    className="input"
+                    value={notificationSettings.frequency}
+                    onChange={(event) => setNotificationSettings((current) => ({ ...current, frequency: event.target.value as 'daily' | 'weekly' }))}
+                  >
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                  </select>
+                </Field>
+                <Field label="Send at">
+                  <input
+                    className="input"
+                    type="time"
+                    value={notificationSettings.scheduled_time}
+                    onChange={(event) => setNotificationSettings((current) => ({ ...current, scheduled_time: event.target.value }))}
+                  />
+                </Field>
+              </div>
+
+              <Field label="Notification email">
+                <input
+                  className="input"
+                  type="email"
+                  value={notificationSettings.email_override}
+                  onChange={(event) => setNotificationSettings((current) => ({ ...current, email_override: event.target.value }))}
+                  placeholder={session.user_email || 'leave blank to use your account email'}
+                />
+              </Field>
+
+              <div className="toolbar__group">
+                <button className="button button--primary" type="submit" disabled={settingsLoading}>
+                  {settingsLoading ? 'Saving...' : 'Save notification schedule'}
+                </button>
+                <span className="muted">{settingsStatus || 'Digest emails are driven by the backend worker.'}</span>
+              </div>
+            </form>
+          </div>
+        </section>
+      )}
+
+      {session.logged_in && session.account_status !== 'trial' && session.account_status !== 'premium' && (
+        <section className="card">
+          <div className="card__body muted">
+            Notification scheduling is available on premium and trial accounts.
+          </div>
+        </section>
+      )}
     </div>
   );
 }

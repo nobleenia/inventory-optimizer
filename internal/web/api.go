@@ -222,6 +222,7 @@ func (s *Server) handleAPIAnalyze(w http.ResponseWriter, r *http.Request) {
 
 		if err := s.db.CreateReport(r.Context(), dbReport); err == nil {
 			response["saved_report_id"] = dbReport.ID
+			_ = s.enqueueReplenishmentNotifications(r.Context(), claims.Subject, dbReport.ID, reports)
 		}
 	} else if claims == nil {
 		// Truncate for guests in API too to mirror web.

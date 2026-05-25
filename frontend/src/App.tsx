@@ -2315,7 +2315,7 @@ function RecordsPage() {
               </article>
             </div>
 
-            <label className="field" style={{ width: 'fit-content' }}>
+            <label className="field" style={{ width: 'fit-content', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <span className="field__label">Pre-fill with my SKU catalogue data</span>
               <input
                 type="checkbox"

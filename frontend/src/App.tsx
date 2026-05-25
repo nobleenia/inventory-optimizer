@@ -51,6 +51,9 @@ type Session = {
   premium_expired: boolean;
   trial_expires_at?: string | null;
   user_email?: string;
+  preferred_currency?: string;
+  country_code?: string;
+  business_type?: string;
 };
 
 type ReportSummary = {
@@ -217,6 +220,48 @@ const NAV_ITEMS = [
   { path: '/records', label: 'Smart Records', icon: Sparkles },
   { path: '/reports', label: 'My Reports', icon: FileText },
   { path: '/upload', label: 'New Analysis', icon: Upload },
+] as const;
+
+const CURRENCY_OPTIONS = [
+  { value: 'NGN', label: 'NGN - Nigerian naira' },
+  { value: 'GHS', label: 'GHS - Ghanaian cedi' },
+  { value: 'KES', label: 'KES - Kenyan shilling' },
+  { value: 'ZAR', label: 'ZAR - South African rand' },
+  { value: 'TZS', label: 'TZS - Tanzanian shilling' },
+  { value: 'UGX', label: 'UGX - Ugandan shilling' },
+  { value: 'XOF', label: 'XOF - West African CFA franc' },
+  { value: 'XAF', label: 'XAF - Central African CFA franc' },
+  { value: 'USD', label: 'USD - US dollar' },
+  { value: 'EUR', label: 'EUR - Euro' },
+  { value: 'GBP', label: 'GBP - British pound' },
+  { value: 'CAD', label: 'CAD - Canadian dollar' },
+  { value: 'AUD', label: 'AUD - Australian dollar' },
+  { value: 'JPY', label: 'JPY - Japanese yen' },
+  { value: 'INR', label: 'INR - Indian rupee' },
+  { value: 'AED', label: 'AED - UAE dirham' },
+] as const;
+
+const COUNTRY_OPTIONS = [
+  { value: 'NG', label: 'Nigeria' },
+  { value: 'GH', label: 'Ghana' },
+  { value: 'KE', label: 'Kenya' },
+  { value: 'ZA', label: 'South Africa' },
+  { value: 'TZ', label: 'Tanzania' },
+  { value: 'UG', label: 'Uganda' },
+  { value: 'CI', label: "Cote d'Ivoire" },
+  { value: 'CM', label: 'Cameroon' },
+  { value: 'US', label: 'United States' },
+  { value: 'GB', label: 'United Kingdom' },
+  { value: 'CA', label: 'Canada' },
+  { value: 'AU', label: 'Australia' },
+  { value: 'AE', label: 'United Arab Emirates' },
+] as const;
+
+const BUSINESS_TYPE_OPTIONS = [
+  { value: 'retail', label: 'Retail', hint: 'Storefront or direct-to-consumer sales' },
+  { value: 'wholesale', label: 'Wholesale', hint: 'Bulk orders and longer replenishment cycles' },
+  { value: 'ecommerce', label: 'Ecommerce', hint: 'Online catalogues and fast-moving stock' },
+  { value: 'mixed', label: 'Mixed', hint: 'A blend of retail, wholesale, and online channels' },
 ] as const;
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
@@ -920,12 +965,14 @@ function DashboardPage() {
   const [skus, setSkus] = useState<Sku[]>([]);
   const [error, setError] = useState<string>('');
   const [analysisNotice, setAnalysisNotice] = useState<AnalysisNotice | null>(null);
+  const [latestReportDetail, setLatestReportDetail] = useState<ReportDetail | null>(null);
   const [deletingReportId, setDeletingReportId] = useState('');
 
   useEffect(() => {
     if (!session.logged_in) {
       setReports([]);
       setSkus([]);
+      setLatestReportDetail(null);
       return;
     }
 
@@ -941,27 +988,60 @@ function DashboardPage() {
     }
 
     let mounted = true;
-    Promise.all([
-      apiFetch<{ reports: ReportSummary[] }>('/api/v1/reports?limit=1000'),
-      apiFetch<{ skus: Sku[] }>('/api/v1/catalogue/skus'),
-    ])
-      .then(([reportsData, skusData]) => {
+    const loadDashboard = async () => {
+      try {
+        const [reportsData, skusData] = await Promise.all([
+          apiFetch<{ reports: ReportSummary[] }>('/api/v1/reports?limit=1000'),
+          apiFetch<{ skus: Sku[] }>('/api/v1/catalogue/skus'),
+        ]);
+
         if (!mounted) {
           return;
         }
-        setReports(reportsData.reports ?? []);
+
+        const nextReports = reportsData.reports ?? [];
+        setReports(nextReports);
         setSkus(skusData.skus ?? []);
-      })
-      .catch((value: Error) => {
-        if (mounted) {
-          setError(value.message);
+
+        if (nextReports[0]) {
+          const detail = await apiFetch<ReportDetail>(`/api/v1/reports/${nextReports[0].id}`);
+          if (mounted) {
+            setLatestReportDetail(detail);
+          }
+        } else {
+          setLatestReportDetail(null);
         }
-      });
+      } catch (value) {
+        if (mounted) {
+          setError((value as Error).message);
+        }
+      }
+    };
+
+    loadDashboard();
 
     return () => {
       mounted = false;
     };
   }, [session.logged_in]);
+
+  const replenishmentAlerts = useMemo(() => {
+    const results = latestReportDetail?.results ?? [];
+    return results
+      .map((result) => {
+        const shortage = Math.ceil(Math.max(0, result.policy.reorder_point - result.parameters.current_inventory));
+        return {
+          sku: result.parameters.sku,
+          shortage,
+          currentInventory: result.parameters.current_inventory,
+          reorderPoint: Math.round(result.policy.reorder_point),
+          annualCost: result.simulation.avg_total_annual_cost,
+        };
+      })
+      .filter((item) => item.shortage > 0)
+      .sort((a, b) => b.shortage - a.shortage)
+      .slice(0, 3);
+  }, [latestReportDetail]);
 
   const deleteReport = async (reportId: string) => {
     if (!window.confirm('Delete this report? This cannot be undone.')) {
@@ -1024,6 +1104,53 @@ function DashboardPage() {
                 Go to My Reports
               </Link>
               {analysisNotice.reportId && <Link className="button button--ghost" to={`/reports/${analysisNotice.reportId}`}>Open saved report</Link>}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {latestReportDetail && (
+        <section className="card" style={{ border: replenishmentAlerts.length ? '1px solid rgba(220, 38, 38, 0.18)' : '1px solid rgba(15, 118, 110, 0.18)' }}>
+          <div className="card__body stack">
+            <div className="toolbar">
+              <div>
+                <p className="eyebrow">Replenishment feed</p>
+                <h2 className="card__title">Stock-up alerts from your latest report</h2>
+              </div>
+              <span className={`badge ${replenishmentAlerts.length ? 'badge--amber' : 'badge--teal'}`}>
+                {replenishmentAlerts.length ? `${replenishmentAlerts.length} action item${replenishmentAlerts.length === 1 ? '' : 's'}` : 'All clear'}
+              </span>
+            </div>
+
+            {replenishmentAlerts.length ? (
+              <div className="stack">
+                {replenishmentAlerts.map((alert) => (
+                  <div key={alert.sku} className="card" style={{ border: '1px solid rgba(220, 38, 38, 0.12)', background: 'linear-gradient(135deg, rgba(254, 242, 242, 0.9), rgba(255, 251, 235, 0.95))' }}>
+                    <div className="card__body">
+                      <div className="toolbar">
+                        <div>
+                          <div className="card__title">SKU {alert.sku}</div>
+                          <div className="card__meta">
+                            {alert.shortage} units below reorder point · stock {alert.currentInventory} vs ROP {alert.reorderPoint}
+                          </div>
+                        </div>
+                        <span className="badge badge--amber">Replenish</span>
+                      </div>
+                      <div className="toolbar" style={{ marginTop: '0.75rem' }}>
+                        <span className="badge badge--stone">Projected annual cost {formatMoney(alert.annualCost)}</span>
+                        <Link className="button button--ghost button--small" to={latestReportDetail.id ? `/reports/${latestReportDetail.id}` : '/reports'}>Open report</Link>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="muted">No immediate replenishment alerts. Your latest report does not show any SKUs below reorder point yet.</p>
+            )}
+
+            <div className="toolbar__group">
+              <Link className="button button--secondary" to={latestReportDetail.id ? `/reports/${latestReportDetail.id}` : '/reports'}>Review latest report</Link>
+              <Link className="button button--ghost" to="/catalogue">Check catalogue</Link>
             </div>
           </div>
         </section>
@@ -2996,6 +3123,10 @@ function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [signupStep, setSignupStep] = useState<1 | 2>(1);
+  const [preferredCurrency, setPreferredCurrency] = useState('NGN');
+  const [countryCode, setCountryCode] = useState('NG');
+  const [businessType, setBusinessType] = useState('retail');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const redirect = searchParams.get('redirect') || '/';
@@ -3006,6 +3137,21 @@ function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+
+    if (mode === 'signup' && signupStep === 1) {
+      if (!email.trim() || !password || !confirmPassword) {
+        setError('Enter your account details to continue.');
+        return;
+      }
+      if (password !== confirmPassword) {
+        setError('Passwords do not match.');
+        return;
+      }
+      setError('');
+      setSignupStep(2);
+      return;
+    }
+
     setBusy(true);
     setError('');
 
@@ -3013,7 +3159,14 @@ function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
       const path = mode === 'login' ? '/api/v1/auth/login' : '/api/v1/auth/register';
       const body = mode === 'login'
         ? { email, password }
-        : { email, password, confirm_password: confirmPassword };
+        : {
+          email,
+          password,
+          confirm_password: confirmPassword,
+          preferred_currency: preferredCurrency,
+          country_code: countryCode,
+          business_type: businessType,
+        };
 
       const response = await apiFetch<{ access_token: string } & { refresh_token?: string }>(path, {
         method: 'POST',
@@ -3047,24 +3200,75 @@ function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
         <div className="card__body">
           <p className="eyebrow">{mode === 'login' ? 'Welcome back' : 'Create account'}</p>
           <h1 className="page__title" style={{ fontSize: '2rem' }}>{mode === 'login' ? 'Sign in' : 'Sign up'}</h1>
-          <p className="page__subtitle">The session is stored as a bearer token so the SPA can use the live API routes.</p>
+          <p className="page__subtitle">
+            The session is stored as a bearer token so the SPA can use the live API routes.
+            {mode === 'signup' && ' New accounts now include a short business setup step for currency, country, and business type.'}
+          </p>
+
+          {mode === 'signup' && (
+            <div className="toolbar" style={{ marginBottom: '1rem' }}>
+              <span className={`badge ${signupStep === 1 ? 'badge--teal' : 'badge--stone'}`}>1. Account details</span>
+              <span className={`badge ${signupStep === 2 ? 'badge--teal' : 'badge--stone'}`}>2. Business profile</span>
+            </div>
+          )}
 
           <form className="stack" onSubmit={submit}>
-            <Field label="Email">
-              <input className="input" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
-            </Field>
-            <Field label="Password">
-              <input className="input" type="password" value={password} onChange={(event) => setPassword(event.target.value)} required />
-            </Field>
-            {mode === 'signup' && (
-              <Field label="Confirm password">
-                <input className="input" type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required />
-              </Field>
+            {mode === 'login' || signupStep === 1 ? (
+              <>
+                <Field label="Email">
+                  <input className="input" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
+                </Field>
+                <Field label="Password">
+                  <input className="input" type="password" value={password} onChange={(event) => setPassword(event.target.value)} required />
+                </Field>
+                {mode === 'signup' && (
+                  <Field label="Confirm password">
+                    <input className="input" type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required />
+                  </Field>
+                )}
+              </>
+            ) : (
+              <>
+                <Field label="Preferred currency">
+                  <select className="input" value={preferredCurrency} onChange={(event) => setPreferredCurrency(event.target.value)} required>
+                    {CURRENCY_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Country">
+                  <select className="input" value={countryCode} onChange={(event) => setCountryCode(event.target.value)} required>
+                    {COUNTRY_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Business type">
+                  <select className="input" value={businessType} onChange={(event) => setBusinessType(event.target.value)} required>
+                    {BUSINESS_TYPE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </Field>
+                <div className="card" style={{ margin: 0, background: 'linear-gradient(135deg, rgba(245, 238, 228, 0.7), rgba(251, 248, 241, 0.95))' }}>
+                  <div className="card__body stack">
+                    <div className="card__title" style={{ fontSize: '1rem' }}>Why this matters</div>
+                    <p className="muted">Your currency controls how costs are displayed, your country helps us shape regional defaults later, and your business type helps tailor replenishment logic.</p>
+                  </div>
+                </div>
+              </>
             )}
             {error && <div className="muted">{error}</div>}
-            <button className="button button--primary" type="submit" disabled={busy}>
-              {busy ? 'Working...' : mode === 'login' ? 'Login' : 'Signup'}
-            </button>
+            <div className="toolbar__group">
+              {mode === 'signup' && signupStep === 2 && (
+                <button className="button button--ghost" type="button" onClick={() => setSignupStep(1)} disabled={busy}>
+                  Back
+                </button>
+              )}
+              <button className="button button--primary" type="submit" disabled={busy}>
+                {busy ? 'Working...' : mode === 'login' ? 'Login' : signupStep === 1 ? 'Next' : 'Create account'}
+              </button>
+            </div>
           </form>
         </div>
       </section>

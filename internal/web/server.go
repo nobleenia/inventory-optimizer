@@ -448,6 +448,9 @@ func (s *Server) handleRegisterSubmit(w http.ResponseWriter, r *http.Request) {
 	email := strings.TrimSpace(strings.ToLower(r.FormValue("email")))
 	password := r.FormValue("password")
 	confirm := r.FormValue("confirm_password")
+	preferredCurrency := strings.ToUpper(strings.TrimSpace(r.FormValue("preferred_currency")))
+	countryCode := strings.ToUpper(strings.TrimSpace(r.FormValue("country_code")))
+	businessType := strings.ToLower(strings.TrimSpace(r.FormValue("business_type")))
 
 	d := s.baseData(r)
 	d["Email"] = email
@@ -468,6 +471,11 @@ func (s *Server) handleRegisterSubmit(w http.ResponseWriter, r *http.Request) {
 		s.render(w, "register.html", d)
 		return
 	}
+	if len(preferredCurrency) < 3 || len(countryCode) != 2 || businessType == "" {
+		d["Error"] = "Please choose your currency, country, and business type."
+		s.render(w, "register.html", d)
+		return
+	}
 
 	hash, err := auth.HashPassword(password)
 	if err != nil {
@@ -476,7 +484,7 @@ func (s *Server) handleRegisterSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := s.db.CreateUser(r.Context(), email, hash)
+	user, err := s.db.CreateUser(r.Context(), email, hash, preferredCurrency, countryCode, businessType)
 	if errors.Is(err, store.ErrEmailTaken) {
 		d["Error"] = "An account with this email already exists."
 		s.render(w, "register.html", d)

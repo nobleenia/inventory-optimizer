@@ -64,6 +64,9 @@ func (db *DB) migrate(ctx context.Context) error {
 		id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 		email      TEXT UNIQUE NOT NULL,
 		password   TEXT NOT NULL,
+		preferred_currency TEXT NOT NULL DEFAULT 'USD',
+		country_code       TEXT NOT NULL DEFAULT '',
+		business_type      TEXT NOT NULL DEFAULT 'retail',
 		created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 		updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 	);
@@ -145,6 +148,9 @@ func (db *DB) migrate(ctx context.Context) error {
 	`
 	db.Pool.Exec(ctx, `ALTER TABLE skus ADD COLUMN IF NOT EXISTS selling_price DOUBLE PRECISION NOT NULL DEFAULT 0;`)
 	db.Pool.Exec(ctx, `ALTER TABLE skus ADD COLUMN IF NOT EXISTS current_stock INTEGER NOT NULL DEFAULT 0;`)
+	db.Pool.Exec(ctx, `ALTER TABLE users ADD COLUMN IF NOT EXISTS preferred_currency TEXT NOT NULL DEFAULT 'USD';`)
+	db.Pool.Exec(ctx, `ALTER TABLE users ADD COLUMN IF NOT EXISTS country_code TEXT NOT NULL DEFAULT '';`)
+	db.Pool.Exec(ctx, `ALTER TABLE users ADD COLUMN IF NOT EXISTS business_type TEXT NOT NULL DEFAULT 'retail';`)
 	db.Pool.Exec(ctx, `CREATE TABLE IF NOT EXISTS inventory_movements (
 		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,

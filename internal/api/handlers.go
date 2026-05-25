@@ -31,8 +31,11 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------------------
 
 type registerRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Email             string `json:"email"`
+	Password          string `json:"password"`
+	PreferredCurrency string `json:"preferred_currency"`
+	CountryCode       string `json:"country_code"`
+	BusinessType      string `json:"business_type"`
 }
 
 type authResponse struct {
@@ -48,12 +51,19 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	req.Email = strings.TrimSpace(strings.ToLower(req.Email))
+	req.PreferredCurrency = strings.ToUpper(strings.TrimSpace(req.PreferredCurrency))
+	req.CountryCode = strings.ToUpper(strings.TrimSpace(req.CountryCode))
+	req.BusinessType = strings.ToLower(strings.TrimSpace(req.BusinessType))
 	if req.Email == "" || !strings.Contains(req.Email, "@") {
 		writeError(w, http.StatusBadRequest, "A valid email address is required")
 		return
 	}
 	if len(req.Password) < 8 {
 		writeError(w, http.StatusBadRequest, "Password must be at least 8 characters")
+		return
+	}
+	if len(req.PreferredCurrency) < 3 || len(req.CountryCode) != 2 || req.BusinessType == "" {
+		writeError(w, http.StatusBadRequest, "Currency, country, and business type are required")
 		return
 	}
 
@@ -63,7 +73,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := s.db.CreateUser(r.Context(), req.Email, hash)
+	user, err := s.db.CreateUser(r.Context(), req.Email, hash, req.PreferredCurrency, req.CountryCode, req.BusinessType)
 	if errors.Is(err, store.ErrEmailTaken) {
 		writeError(w, http.StatusConflict, "Email already registered")
 		return

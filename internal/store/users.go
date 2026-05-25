@@ -11,11 +11,14 @@ import (
 
 // User represents a registered user.
 type User struct {
-	ID        string    `json:"id"`
-	Email     string    `json:"email"`
-	Password  string    `json:"-"` // bcrypt hash, never serialized
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID                string    `json:"id"`
+	Email             string    `json:"email"`
+	Password          string    `json:"-"` // bcrypt hash, never serialized
+	PreferredCurrency string    `json:"preferred_currency"`
+	CountryCode       string    `json:"country_code"`
+	BusinessType      string    `json:"business_type"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
 }
 
 // ErrUserNotFound is returned when a lookup finds no matching user.
@@ -25,14 +28,14 @@ var ErrUserNotFound = errors.New("user not found")
 var ErrEmailTaken = errors.New("email already registered")
 
 // CreateUser inserts a new user with a pre-hashed password.
-func (db *DB) CreateUser(ctx context.Context, email, hashedPassword string) (*User, error) {
+func (db *DB) CreateUser(ctx context.Context, email, hashedPassword, preferredCurrency, countryCode, businessType string) (*User, error) {
 	u := &User{}
 	err := db.Pool.QueryRow(ctx,
-		`INSERT INTO users (email, password)
-		 VALUES ($1, $2)
-		 RETURNING id, email, created_at, updated_at`,
-		email, hashedPassword,
-	).Scan(&u.ID, &u.Email, &u.CreatedAt, &u.UpdatedAt)
+		`INSERT INTO users (email, password, preferred_currency, country_code, business_type)
+		 VALUES ($1, $2, $3, $4, $5)
+		 RETURNING id, email, preferred_currency, country_code, business_type, created_at, updated_at`,
+		email, hashedPassword, preferredCurrency, countryCode, businessType,
+	).Scan(&u.ID, &u.Email, &u.PreferredCurrency, &u.CountryCode, &u.BusinessType, &u.CreatedAt, &u.UpdatedAt)
 
 	if err != nil {
 		if isDuplicateKey(err) {
@@ -47,10 +50,10 @@ func (db *DB) CreateUser(ctx context.Context, email, hashedPassword string) (*Us
 func (db *DB) GetUserByEmail(ctx context.Context, email string) (*User, error) {
 	u := &User{}
 	err := db.Pool.QueryRow(ctx,
-		`SELECT id, email, password, created_at, updated_at
+		`SELECT id, email, password, preferred_currency, country_code, business_type, created_at, updated_at
 		 FROM users WHERE email = $1`,
 		email,
-	).Scan(&u.ID, &u.Email, &u.Password, &u.CreatedAt, &u.UpdatedAt)
+	).Scan(&u.ID, &u.Email, &u.Password, &u.PreferredCurrency, &u.CountryCode, &u.BusinessType, &u.CreatedAt, &u.UpdatedAt)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrUserNotFound
@@ -65,10 +68,10 @@ func (db *DB) GetUserByEmail(ctx context.Context, email string) (*User, error) {
 func (db *DB) GetUserByID(ctx context.Context, id string) (*User, error) {
 	u := &User{}
 	err := db.Pool.QueryRow(ctx,
-		`SELECT id, email, password, created_at, updated_at
+		`SELECT id, email, password, preferred_currency, country_code, business_type, created_at, updated_at
 		 FROM users WHERE id = $1`,
 		id,
-	).Scan(&u.ID, &u.Email, &u.Password, &u.CreatedAt, &u.UpdatedAt)
+	).Scan(&u.ID, &u.Email, &u.Password, &u.PreferredCurrency, &u.CountryCode, &u.BusinessType, &u.CreatedAt, &u.UpdatedAt)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrUserNotFound

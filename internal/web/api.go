@@ -37,8 +37,11 @@ func (s *Server) handleAPIRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
+		Email             string `json:"email"`
+		Password          string `json:"password"`
+		PreferredCurrency string `json:"preferred_currency"`
+		CountryCode       string `json:"country_code"`
+		BusinessType      string `json:"business_type"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		s.sendErrorJSON(w, http.StatusBadRequest, "Invalid JSON body")
@@ -46,12 +49,20 @@ func (s *Server) handleAPIRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	req.Email = strings.TrimSpace(strings.ToLower(req.Email))
 	if req.Email == "" || len(req.Password) < 8 {
 		s.sendErrorJSON(w, http.StatusBadRequest, "Email required and password must be >= 8 chars")
 		return
 	}
+	req.PreferredCurrency = strings.ToUpper(strings.TrimSpace(req.PreferredCurrency))
+	req.CountryCode = strings.ToUpper(strings.TrimSpace(req.CountryCode))
+	req.BusinessType = strings.ToLower(strings.TrimSpace(req.BusinessType))
+	if len(req.PreferredCurrency) < 3 || len(req.CountryCode) != 2 || req.BusinessType == "" {
+		s.sendErrorJSON(w, http.StatusBadRequest, "Currency, country, and business type are required")
+		return
+	}
 
-	user, err := s.db.CreateUser(r.Context(), req.Email, req.Password)
+	user, err := s.db.CreateUser(r.Context(), req.Email, req.Password, req.PreferredCurrency, req.CountryCode, req.BusinessType)
 	if err != nil {
 		s.sendErrorJSON(w, http.StatusConflict, "Email already exists or registration failed")
 		return
@@ -117,6 +128,13 @@ func (s *Server) handleAPIMe(w http.ResponseWriter, r *http.Request) {
 	if claims == nil {
 		s.sendJSON(w, http.StatusOK, data)
 		return
+	}
+	if s.db != nil {
+		if user, err := s.db.GetUserByID(r.Context(), claims.Subject); err == nil && user != nil {
+			data["preferred_currency"] = user.PreferredCurrency
+			data["country_code"] = user.CountryCode
+			data["business_type"] = user.BusinessType
+		}
 	}
 
 	state := s.accessStateForUser(r)

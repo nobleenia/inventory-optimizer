@@ -2612,6 +2612,11 @@ function ComparePage() {
           <h1 className="page__title">Side-by-side report analysis</h1>
           <p className="page__subtitle">This page now pulls live report details and computes the deltas in the browser.</p>
         </div>
+        <div className="toolbar__group">
+          <Link className="button button--ghost button--small" to="/reports">
+            Back to reports
+          </Link>
+        </div>
       </div>
 
       {error && <div className="card"><div className="card__body muted">{error}</div></div>}

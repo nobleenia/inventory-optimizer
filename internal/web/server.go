@@ -719,8 +719,13 @@ func (s *Server) serveApp(w http.ResponseWriter) {
 }
 
 func (s *Server) handleCataloguePage(w http.ResponseWriter, r *http.Request) {
-	// Render the catalogue shell for both guests and signed-in users.
-	// Actions remain gated by the API, but the page itself stays visible.
+	claims := s.currentUser(r)
+	if claims == nil {
+		http.Redirect(w, r, "/login?redirect=/catalogue", http.StatusSeeOther)
+		return
+	}
+
+	// Use shared base data so nav/user state is consistent with other pages.
 	d := s.baseData(r)
 	s.render(w, "catalogue.html", d)
 }

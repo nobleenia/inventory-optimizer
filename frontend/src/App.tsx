@@ -507,7 +507,7 @@ function App() {
             <Routes>
               <Route path="/" element={<HomeRoute />} />
               <Route path="/dashboard" element={<RequireAuth><DashboardPage /></RequireAuth>} />
-              <Route path="/catalogue" element={<CataloguePage />} />
+              <Route path="/catalogue" element={<RequireAuth><CataloguePage /></RequireAuth>} />
               <Route path="/catalogue/:id" element={<RequireAuth><SkuDetailPage /></RequireAuth>} />
               <Route path="/records" element={<RequireAuth><RecordsPage /></RequireAuth>} />
               <Route path="/reports" element={<RequireAuth><ReportsPage /></RequireAuth>} />

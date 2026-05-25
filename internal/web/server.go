@@ -8,11 +8,13 @@
 package web
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
+	"io/fs"
 	"log"
 	"math"
 	"net/http"
@@ -27,11 +29,20 @@ import (
 	"github.com/noble-ch/inventory-optimizer/internal/store"
 )
 
-//go:embed templates/*.html static/css/*.css static/js/*.js
+//go:embed templates/*.html static/css/*.css static/js/*.js static/app
 var content embed.FS
 
 const sessionCookieName = "io_session"
 const maxGuestSKUs = 1 // guests see full detail for this many SKUs
+const freeTrialMonths = 6
+
+type accessState struct {
+	AccountStatus      string
+	FreeTrialActive    bool
+	PremiumExpired     bool
+	SubscriptionActive bool
+	TrialExpiresAt     *time.Time
+}
 
 // templateFuncs provides custom functions available in HTML templates.
 var templateFuncs = template.FuncMap{
@@ -65,11 +76,13 @@ var templateFuncs = template.FuncMap{
 
 // Server holds the HTTP server configuration and optional auth/db deps.
 type Server struct {
-	Addr string
-	mux  *http.ServeMux
-	tmpl *template.Template
-	db   *store.DB     // nil = no database (guest-only mode)
-	auth *auth.Service // nil = no auth
+	Addr   string
+	mux    *http.ServeMux
+	tmpl   *template.Template
+	app    fs.FS
+	assets fs.FS
+	db     *store.DB     // nil = no database (guest-only mode)
+	auth   *auth.Service // nil = no auth
 }
 
 // NewServer creates a configured server ready to ListenAndServe.
@@ -81,6 +94,17 @@ func NewServer(addr string, db *store.DB, authSvc *auth.Service) *Server {
 		db:   db,
 		auth: authSvc,
 	}
+
+	appFS, err := fs.Sub(content, "static/app")
+	if err != nil {
+		panic(err)
+	}
+	s.app = appFS
+	assetsFS, err := fs.Sub(appFS, "assets")
+	if err != nil {
+		panic(err)
+	}
+	s.assets = assetsFS
 
 	// Parse embedded templates.
 	s.tmpl = template.Must(
@@ -94,6 +118,7 @@ func NewServer(addr string, db *store.DB, authSvc *auth.Service) *Server {
 	s.mux.HandleFunc("/download/csv", s.handleDownloadCSV)
 	s.mux.HandleFunc("/download/pdf", s.handleDownloadPDF)
 	s.mux.Handle("/static/", http.FileServer(http.FS(content)))
+	s.mux.Handle("/assets/", http.StripPrefix("/assets/", http.FileServer(http.FS(s.assets))))
 
 	// Auth routes (only meaningful when db != nil, but always registered).
 	s.mux.HandleFunc("GET /login", s.handleLoginPage)
@@ -111,6 +136,7 @@ func NewServer(addr string, db *store.DB, authSvc *auth.Service) *Server {
 	s.mux.HandleFunc("POST /reports/{id}/delete", s.handleReportDelete)
 
 	// API routes.
+	s.mux.HandleFunc("GET /api/v1/auth/me", s.handleAPIMe)
 	s.mux.HandleFunc("POST /api/v1/auth/register", s.handleAPIRegister)
 	s.mux.HandleFunc("POST /api/v1/auth/login", s.handleAPILogin)
 	s.mux.HandleFunc("POST /api/v1/analyze", s.handleAPIAnalyze)
@@ -124,13 +150,16 @@ func NewServer(addr string, db *store.DB, authSvc *auth.Service) *Server {
 	s.mux.HandleFunc("GET /api/v1/reports/{id}/pdf", s.handleAPIReportPDF)
 
 	// Catalogue API
+	s.mux.HandleFunc("GET /api/v1/catalogue/skus/{id}", s.requirePremium(s.handleAPIGetSKUDetail))
 	s.mux.HandleFunc("GET /api/v1/catalogue/skus", s.requirePremium(s.handleAPIGetSKUs))
 	s.mux.HandleFunc("POST /api/v1/catalogue/skus", s.requirePremium(s.handleAPICreateSKU))
 	s.mux.HandleFunc("DELETE /api/v1/catalogue/skus/{id}", s.requirePremium(s.handleAPIDeleteSKU))
 	s.mux.HandleFunc("POST /api/v1/catalogue/skus/{id}/sales", s.requirePremium(s.handleAPILogSales))
+	s.mux.HandleFunc("POST /api/v1/catalogue/skus/{id}/replenish", s.requirePremium(s.handleAPIReplenishSKU))
 	s.mux.HandleFunc("POST /api/v1/catalogue/analyze", s.requirePremium(s.handleAPIAutoAnalyze))
 	s.mux.HandleFunc("GET /api/v1/catalogue/abc-xyz", s.requirePremium(s.handleAPIGetABCXYZ))
 	s.mux.HandleFunc("GET /api/v1/catalogue/skus/{id}/forecast", s.requirePremium(s.handleAPIGetForecast))
+	s.mux.HandleFunc("GET /api/v1/catalogue/export.csv", s.requirePremium(s.handleAPIExportCatalogueCSV))
 	s.mux.HandleFunc("POST /api/v1/catalogue/budget-optimize", s.requirePremium(s.handleAPIBudgetOptimize))
 
 	// Records API (Smart Sheets)
@@ -180,6 +209,77 @@ func (s *Server) Start() error {
 
 // hasAuth returns true when the server is configured with database + auth.
 func (s *Server) hasAuth() bool { return s.db != nil && s.auth != nil }
+
+func (s *Server) accessStateForUser(r *http.Request) accessState {
+	state := accessState{AccountStatus: "guest"}
+	claims := s.currentUser(r)
+	if claims == nil {
+		return state
+	}
+
+	if s.db == nil {
+		state.AccountStatus = "authenticated"
+		return state
+	}
+
+	user, err := s.db.GetUserByID(r.Context(), claims.Subject)
+	if err != nil {
+		state.AccountStatus = "authenticated"
+		return state
+	}
+
+	trialExpiresAt := user.CreatedAt.AddDate(0, freeTrialMonths, 0)
+	state.TrialExpiresAt = &trialExpiresAt
+
+	if sub, err := s.db.GetSubscription(r.Context(), claims.Subject); err == nil && sub != nil {
+		if sub.Status == "active" {
+			state.AccountStatus = "premium"
+			state.SubscriptionActive = true
+			return state
+		}
+		if sub.Status == "trial" {
+			if sub.CurrentPeriodEnd.IsZero() {
+				sub.CurrentPeriodEnd = trialExpiresAt
+			}
+			state.TrialExpiresAt = &sub.CurrentPeriodEnd
+			if time.Now().Before(sub.CurrentPeriodEnd) {
+				state.AccountStatus = "trial"
+				state.FreeTrialActive = true
+				return state
+			}
+			state.AccountStatus = "expired"
+			state.PremiumExpired = true
+			return state
+		}
+	}
+
+	if time.Now().Before(trialExpiresAt) {
+		state.AccountStatus = "trial"
+		state.FreeTrialActive = true
+		return state
+	}
+
+	state.AccountStatus = "expired"
+	state.PremiumExpired = true
+	return state
+}
+
+func (s *Server) hasPremiumAccess(r *http.Request) bool {
+	state := s.accessStateForUser(r)
+	return state.AccountStatus == "premium" || state.AccountStatus == "trial"
+}
+
+func (s *Server) seedTrialSubscription(ctx context.Context, user *store.User) {
+	if s.db == nil || user == nil {
+		return
+	}
+	trialExpiresAt := user.CreatedAt.AddDate(0, freeTrialMonths, 0)
+	_ = s.db.UpsertSubscription(ctx, &store.Subscription{
+		UserID:           user.ID,
+		Status:           "trial",
+		CurrentPeriodEnd: trialExpiresAt,
+	})
+}
 
 // ---------------------------------------------------------------------------
 // Session management
@@ -252,20 +352,13 @@ func (s *Server) baseData(r *http.Request) map[string]interface{} {
 	d["ActiveRecords"] = strings.HasPrefix(path, "/records")
 	d["ActiveReports"] = strings.HasPrefix(path, "/reports")
 	d["ActiveUpload"] = (path == "/upload")
-	// Account status: guest | authenticated | premium
-	accountStatus := "guest"
-	if s.db == nil {
-		accountStatus = "guest"
-	} else if claims := s.currentUser(r); claims == nil {
-		accountStatus = "authenticated"
-	} else {
-		if sub, err := s.db.GetSubscription(r.Context(), claims.Subject); err == nil && sub != nil && sub.Status == "active" {
-			accountStatus = "premium"
-		} else {
-			accountStatus = "authenticated"
-		}
+	state := s.accessStateForUser(r)
+	d["AccountStatus"] = state.AccountStatus
+	d["FreeTrialActive"] = state.FreeTrialActive
+	d["PremiumExpired"] = state.PremiumExpired
+	if state.TrialExpiresAt != nil {
+		d["TrialExpiresAt"] = state.TrialExpiresAt
 	}
-	d["AccountStatus"] = accountStatus
 	return d
 }
 
@@ -274,20 +367,11 @@ func (s *Server) baseData(r *http.Request) map[string]interface{} {
 // ---------------------------------------------------------------------------
 
 func (s *Server) handleLanding(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" {
-		http.NotFound(w, r)
-		return
-	}
-	// Redirect logged-in users to the dashboard.
-	if s.currentUser(r) != nil {
-		http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
-		return
-	}
-	s.render(w, "landing.html", s.baseData(r))
+	s.serveApp(w)
 }
 
 func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
-	s.render(w, "index.html", s.baseData(r))
+	s.serveApp(w)
 }
 
 // ---------------------------------------------------------------------------
@@ -295,13 +379,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------------------
 
 func (s *Server) handleLoginPage(w http.ResponseWriter, r *http.Request) {
-	if !s.hasAuth() {
-		http.Redirect(w, r, "/upload", http.StatusSeeOther)
-		return
-	}
-	d := s.baseData(r)
-	d["Redirect"] = r.URL.Query().Get("redirect")
-	s.render(w, "login.html", d)
+	s.serveApp(w)
 }
 
 func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
@@ -358,11 +436,7 @@ func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleRegisterPage(w http.ResponseWriter, r *http.Request) {
-	if !s.hasAuth() {
-		http.Redirect(w, r, "/upload", http.StatusSeeOther)
-		return
-	}
-	s.render(w, "register.html", s.baseData(r))
+	s.serveApp(w)
 }
 
 func (s *Server) handleRegisterSubmit(w http.ResponseWriter, r *http.Request) {
@@ -413,6 +487,8 @@ func (s *Server) handleRegisterSubmit(w http.ResponseWriter, r *http.Request) {
 		s.render(w, "register.html", d)
 		return
 	}
+
+	s.seedTrialSubscription(r.Context(), user)
 
 	tokens, err := s.auth.GenerateTokenPair(user.ID, user.Email)
 	if err != nil {
@@ -571,109 +647,19 @@ func (s *Server) handleDownloadPDF(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------------------
 
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
-	claims := s.currentUser(r)
-	if claims == nil {
-		http.Redirect(w, r, "/login?redirect=/dashboard", http.StatusSeeOther)
-		return
-	}
-	if s.db == nil {
-		http.Redirect(w, r, "/upload", http.StatusSeeOther)
-		return
-	}
-
-	stats, err := s.db.GetReportStats(r.Context(), claims.Subject)
-	if err != nil {
-		s.renderError(w, r, "Failed to load dashboard stats: "+err.Error())
-		return
-	}
-
-	reports, _, err := s.db.ListReports(r.Context(), claims.Subject, 5, 0, "", "", "")
-	if err != nil {
-		s.renderError(w, r, "Failed to load recent reports: "+err.Error())
-		return
-	}
-
-	d := s.baseData(r)
-	d["TotalReports"] = stats.TotalReports
-	d["TotalSKUs"] = stats.TotalSKUs
-
-	if stats.LastAnalysis != nil {
-		d["LastAnalysis"] = stats.LastAnalysis.Format("Jan 02, 2006")
-	} else {
-		d["LastAnalysis"] = ""
-	}
-	d["Reports"] = reports
-
-	s.render(w, "dashboard.html", d)
+	s.serveApp(w)
 }
 
 func (s *Server) handleReportsList(w http.ResponseWriter, r *http.Request) {
-	claims := s.currentUser(r)
-	if claims == nil {
-		http.Redirect(w, r, "/login?redirect=/reports", http.StatusSeeOther)
-		return
-	}
-	if s.db == nil {
-		http.Redirect(w, r, "/upload", http.StatusSeeOther)
-		return
-	}
-
-	reports, total, err := s.db.ListReports(r.Context(), claims.UserID, 50, 0, "", "", "")
-	if err != nil {
-		s.renderError(w, r, "Failed to load reports.")
-		return
-	}
-
-	d := s.baseData(r)
-	d["SavedReports"] = reports
-	d["TotalReports"] = total
-	s.render(w, "reports.html", d)
+	s.serveApp(w)
 }
 
 func (s *Server) handleReportDetail(w http.ResponseWriter, r *http.Request) {
-	claims := s.currentUser(r)
-	if claims == nil {
-		http.Redirect(w, r, "/login?redirect="+r.URL.Path, http.StatusSeeOther)
+	if reportID := r.PathValue("id"); reportID != "" {
+		http.Redirect(w, r, "/reports?highlight="+reportID, http.StatusSeeOther)
 		return
 	}
-	if s.db == nil {
-		http.Redirect(w, r, "/upload", http.StatusSeeOther)
-		return
-	}
-
-	reportID := r.PathValue("id")
-	report, err := s.db.GetReport(r.Context(), claims.UserID, reportID)
-	if errors.Is(err, store.ErrReportNotFound) {
-		s.renderError(w, r, "Report not found.")
-		return
-	}
-	if err != nil {
-		s.renderError(w, r, "Failed to load report.")
-		return
-	}
-
-	// Generate temp files for download.
-	tmpCSV := fmt.Sprintf("/tmp/inventory-report-%d.csv", time.Now().UnixNano())
-	if err := reporting.ExportCSV(tmpCSV, report.Results); err != nil {
-		log.Printf("CSV export warning: %v", err)
-	}
-	tmpPDF := fmt.Sprintf("/tmp/inventory-report-%d.pdf", time.Now().UnixNano())
-	if err := reporting.ExportPDF(tmpPDF, report.Results); err != nil {
-		log.Printf("PDF export warning: %v", err)
-	}
-
-	d := s.baseData(r)
-	d["Reports"] = report.Results
-	d["Warnings"] = report.Warnings
-	d["Elapsed"] = "saved report"
-	d["SKUCount"] = report.SKUCount
-	d["CSVPath"] = tmpCSV
-	d["PDFPath"] = tmpPDF
-	d["IsGuest"] = false
-	d["MaxGuestSKUs"] = maxGuestSKUs
-	d["SavedReportID"] = report.ID
-	d["ReportTitle"] = report.Title
-	s.render(w, "results.html", d)
+	s.serveApp(w)
 }
 
 func (s *Server) handleReportDelete(w http.ResponseWriter, r *http.Request) {
@@ -693,57 +679,7 @@ func (s *Server) handleReportDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleReportsCompare(w http.ResponseWriter, r *http.Request) {
-	claims := s.currentUser(r)
-	if claims == nil {
-		http.Redirect(w, r, "/login?redirect=/reports/compare", http.StatusSeeOther)
-		return
-	}
-	if s.db == nil {
-		http.Redirect(w, r, "/upload", http.StatusSeeOther)
-		return
-	}
-
-	idsParam := r.URL.Query().Get("ids")
-	if idsParam == "" {
-		s.renderError(w, r, "Please select two reports to compare.")
-		return
-	}
-	ids := strings.Split(idsParam, ",")
-	if len(ids) != 2 {
-		s.renderError(w, r, "Please select exactly two reports to compare.")
-		return
-	}
-
-	a, err := s.db.GetReport(r.Context(), claims.UserID, ids[0])
-	if err != nil {
-		s.renderError(w, r, "Failed to load first report.")
-		return
-	}
-	b, err := s.db.GetReport(r.Context(), claims.UserID, ids[1])
-	if err != nil {
-		s.renderError(w, r, "Failed to load second report.")
-		return
-	}
-
-	// Prepare previews (first 10 SKUs) to keep template simple.
-	var aPreview, bPreview []models.SKUReport
-	if len(a.Results) > 10 {
-		aPreview = a.Results[:10]
-	} else {
-		aPreview = a.Results
-	}
-	if len(b.Results) > 10 {
-		bPreview = b.Results[:10]
-	} else {
-		bPreview = b.Results
-	}
-
-	d := s.baseData(r)
-	d["ReportA"] = a
-	d["ReportB"] = b
-	d["ReportAPreview"] = aPreview
-	d["ReportBPreview"] = bPreview
-	s.render(w, "reports_compare.html", d)
+	s.serveApp(w)
 }
 
 // ---------------------------------------------------------------------------
@@ -762,6 +698,16 @@ func (s *Server) renderError(w http.ResponseWriter, r *http.Request, msg string)
 	d := s.baseData(r)
 	d["Message"] = msg
 	s.render(w, "error.html", d)
+}
+
+func (s *Server) serveApp(w http.ResponseWriter) {
+	b, err := fs.ReadFile(s.app, "index.html")
+	if err != nil {
+		http.Error(w, "frontend app not available", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write(b)
 }
 
 func (s *Server) handleCataloguePage(w http.ResponseWriter, r *http.Request) {

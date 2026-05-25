@@ -17,7 +17,13 @@
 #     inventory-optimizer:0.4.0 -api
 # ───────────────────────────────────────────────────────────────
 
-# ── Stage 1: build the Go binary ──────────────────────────────
+# ── Stage 1: build the frontend (Node) ─────────────────────────
+FROM node:18-alpine AS nodebuilder
+WORKDIR /src
+COPY . .
+RUN cd frontend && (npm ci --silent || npm install --silent) && npm run build --silent
+
+# ── Stage 2: build the Go binary ──────────────────────────────
 FROM golang:1.24-alpine AS builder
 
 RUN apk add --no-cache git ca-certificates
@@ -27,6 +33,9 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
+
+# Copy built frontend assets from nodebuilder into place so they are embedded
+COPY --from=nodebuilder /src/internal/web/static/app ./internal/web/static/app
 
 # Static CGO-free binary with embedded assets.
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \

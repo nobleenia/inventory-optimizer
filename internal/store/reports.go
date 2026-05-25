@@ -26,11 +26,22 @@ type Report struct {
 	CreatedAt    time.Time          `json:"created_at"`
 }
 
+func normalizeReportSlices(r *Report) {
+	if r.Warnings == nil {
+		r.Warnings = []string{}
+	}
+	if r.Results == nil {
+		r.Results = []models.SKUReport{}
+	}
+}
+
 // ErrReportNotFound is returned when a report lookup finds no match.
 var ErrReportNotFound = errors.New("report not found")
 
 // CreateReport persists a new analysis report for a user.
 func (db *DB) CreateReport(ctx context.Context, r *Report) error {
+	normalizeReportSlices(r)
+
 	warningsJSON, err := json.Marshal(r.Warnings)
 	if err != nil {
 		return fmt.Errorf("marshal warnings: %w", err)
@@ -81,6 +92,7 @@ func (db *DB) GetReport(ctx context.Context, userID, reportID string) (*Report, 
 	if err := json.Unmarshal(resultsJSON, &r.Results); err != nil {
 		return nil, fmt.Errorf("unmarshal results: %w", err)
 	}
+	normalizeReportSlices(r)
 
 	return r, nil
 }
@@ -165,6 +177,7 @@ func (db *DB) ListReports(ctx context.Context, userID string, limit, offset int,
 		if err := json.Unmarshal(warningsJSON, &r.Warnings); err != nil {
 			r.Warnings = []string{}
 		}
+		normalizeReportSlices(&r)
 		reports = append(reports, r)
 	}
 

@@ -14,10 +14,12 @@
             </div>
             {{end}}
         </div>
-        <button class="mobile-menu-btn" type="button" aria-label="Toggle menu" aria-expanded="false" onclick="const nav = document.querySelector('.header-nav'); nav.classList.toggle('nav-open'); this.setAttribute('aria-expanded', nav.classList.contains('nav-open'))">
+        {{if not (and (not .IsLoggedIn) (eq .CurrentPath "/"))}}
+        <button id="headerMenuButton" class="mobile-menu-btn" type="button" aria-label="Toggle menu" aria-expanded="false" onclick="UI.toggleHeaderNav(this)">
             ☰
         </button>
-        <nav class="header-nav">
+        {{end}}
+        <nav class="header-nav{{if and (not .IsLoggedIn) (eq .CurrentPath "/")}} header-nav-home{{end}}">
                 {{if .IsLoggedIn}}
                 <a href="/dashboard" class="btn-header {{if .ActiveDashboard}}active{{end}}">Dashboard</a>
                 <a href="/catalogue" title="Premium analytics and tools (requires subscription)" class="btn-header btn-header-accent {{if .ActiveCatalogue}}active{{end}}">Catalogue</a>

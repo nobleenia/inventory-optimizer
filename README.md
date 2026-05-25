@@ -49,7 +49,18 @@ go build -o inventory-optimizer ./cmd/
 
 Results print to the terminal and optionally export as CSV.
 
-### 2. Web Interface (recommended for most users)
+### 2. Web Interface + React SPA
+
+The browser app is now a React/Vite frontend that consumes the Go backend routes. Build the frontend once, then run the web server:
+
+```bash
+cd frontend
+npm install
+npm run build
+cd ..
+go build -o inventory-optimizer ./cmd/
+./inventory-optimizer -web -port :8080
+```
 
 The web server runs in **two configurations**:
 
@@ -63,6 +74,15 @@ go build -o inventory-optimizer ./cmd/
 ```
 
 Open http://localhost:8080 in your browser.
+
+For active front-end development, run the frontend dev server in one terminal and the Go backend in another:
+
+```bash
+cd frontend
+npm run dev
+```
+
+The Vite dev server proxies `/api` requests to `http://localhost:8080`.
 
 #### Full mode (with PostgreSQL)
 

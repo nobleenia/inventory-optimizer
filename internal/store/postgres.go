@@ -145,6 +145,20 @@ func (db *DB) migrate(ctx context.Context) error {
 	`
 	db.Pool.Exec(ctx, `ALTER TABLE skus ADD COLUMN IF NOT EXISTS selling_price DOUBLE PRECISION NOT NULL DEFAULT 0;`)
 	db.Pool.Exec(ctx, `ALTER TABLE skus ADD COLUMN IF NOT EXISTS current_stock INTEGER NOT NULL DEFAULT 0;`)
+	db.Pool.Exec(ctx, `CREATE TABLE IF NOT EXISTS inventory_movements (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		sku_id TEXT NOT NULL,
+		movement_type TEXT NOT NULL,
+		quantity INTEGER NOT NULL,
+		balance_after INTEGER NOT NULL,
+		note TEXT NOT NULL DEFAULT '',
+		movement_date TIMESTAMPTZ NOT NULL DEFAULT now(),
+		created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+		FOREIGN KEY (user_id, sku_id) REFERENCES skus(user_id, sku_id) ON DELETE CASCADE
+	);`)
+	db.Pool.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_inventory_movements_user_sku ON inventory_movements(user_id, sku_id);`)
+	db.Pool.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_inventory_movements_date ON inventory_movements(movement_date DESC);`)
 
 	// Ensure reports.tags exists for newer code paths
 	db.Pool.Exec(ctx, `ALTER TABLE reports ADD COLUMN IF NOT EXISTS tags JSONB NOT NULL DEFAULT '[]';`)

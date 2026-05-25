@@ -2,11 +2,14 @@ package records
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/noble-ch/inventory-optimizer/internal/store"
 	"github.com/xuri/excelize/v2"
 )
+
+var formulaReferencePattern = regexp.MustCompile(`([A-Z]+)%d`)
 
 // GenerateExcel creates a new Excel file based on the template and provided active columns.
 // If skus is provided, it logically pre-fills the data rows.
@@ -15,15 +18,49 @@ func GenerateExcel(tmpl Template, activeColumns []string, skus []store.SKU) (*ex
 	sheet := "Data"
 	f.SetSheetName("Sheet1", sheet)
 
-	// Filter columns down to only the active ones requested by the user
-	var columns []ColumnConfig
+	// Filter columns down to the active ones requested by the user, while
+	// keeping formula columns and their source columns so the workbook stays valid.
+	selected := make(map[string]struct{}, len(activeColumns))
+	for _, header := range activeColumns {
+		if header != "" {
+			selected[header] = struct{}{}
+		}
+	}
 	for _, col := range tmpl.Columns {
-		if contains(activeColumns, col.Header) {
+		if col.DataType != "formula" {
+			continue
+		}
+		selected[col.Header] = struct{}{}
+		for _, dependency := range formulaDependencies(col.Formula) {
+			index, err := excelize.ColumnNameToNumber(dependency)
+			if err != nil || index < 1 || index > len(tmpl.Columns) {
+				continue
+			}
+			selected[tmpl.Columns[index-1].Header] = struct{}{}
+		}
+	}
+
+	var columns []ColumnConfig
+	var sourceIndexes []int
+	for i, col := range tmpl.Columns {
+		if _, ok := selected[col.Header]; ok {
 			columns = append(columns, col)
+			sourceIndexes = append(sourceIndexes, i+1)
+		}
+	}
+	if len(columns) == 0 {
+		columns = append(columns, tmpl.Columns...)
+		for i := range tmpl.Columns {
+			sourceIndexes = append(sourceIndexes, i+1)
 		}
 	}
 	if len(columns) == 0 {
 		return nil, fmt.Errorf("no columns selected")
+	}
+
+	outputIndexBySourceIndex := make(map[int]int, len(sourceIndexes))
+	for outputIndex, sourceIndex := range sourceIndexes {
+		outputIndexBySourceIndex[sourceIndex] = outputIndex + 1
 	}
 
 	// 1. Write Headers & Set Column Widths
@@ -76,17 +113,7 @@ func GenerateExcel(tmpl Template, activeColumns []string, skus []store.SKU) (*ex
 
 			// Apply formulas
 			if col.DataType == "formula" && col.Formula != "" {
-				// Replace %d formatting tokens with the current rowIdx
-				// e.g., "=C%d*D%d" -> "=C2*D2"
-				formulaStr := col.Formula
-				count := strings.Count(formulaStr, "%d")
-				if count > 0 {
-					args := make([]interface{}, count)
-					for i := 0; i < count; i++ {
-						args[i] = rowIdx
-					}
-					formulaStr = fmt.Sprintf(formulaStr, args...)
-				}
+				formulaStr := rewriteFormula(col.Formula, rowIdx, outputIndexBySourceIndex)
 				f.SetCellFormula(sheet, cell, formulaStr)
 			}
 
@@ -162,6 +189,50 @@ func getSKUFieldValue(sku store.SKU, prefillKey string) interface{} {
 		return sku.CurrentStock
 	}
 	return nil
+}
+
+func formulaDependencies(formula string) []string {
+	matches := formulaReferencePattern.FindAllStringSubmatch(formula, -1)
+	dependencies := make([]string, 0, len(matches))
+	seen := make(map[string]struct{}, len(matches))
+	for _, match := range matches {
+		if len(match) < 2 {
+			continue
+		}
+		letter := match[1]
+		if _, ok := seen[letter]; ok {
+			continue
+		}
+		seen[letter] = struct{}{}
+		dependencies = append(dependencies, letter)
+	}
+	return dependencies
+}
+
+func rewriteFormula(formula string, rowIdx int, outputIndexBySourceIndex map[int]int) string {
+	return formulaReferencePattern.ReplaceAllStringFunc(formula, func(match string) string {
+		parts := formulaReferencePattern.FindStringSubmatch(match)
+		if len(parts) < 2 {
+			return match
+		}
+
+		sourceIndex, err := excelize.ColumnNameToNumber(parts[1])
+		if err != nil {
+			return match
+		}
+
+		outputIndex, ok := outputIndexBySourceIndex[sourceIndex]
+		if !ok {
+			outputIndex = sourceIndex
+		}
+
+		columnName, err := excelize.ColumnNumberToName(outputIndex)
+		if err != nil {
+			return match
+		}
+
+		return fmt.Sprintf("%s%d", columnName, rowIdx)
+	})
 }
 
 func contains(slice []string, val string) bool {

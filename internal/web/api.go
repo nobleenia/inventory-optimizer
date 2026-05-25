@@ -11,6 +11,7 @@ import (
 
 	"github.com/noble-ch/inventory-optimizer/internal/auth"
 	"github.com/noble-ch/inventory-optimizer/internal/engine"
+	"github.com/noble-ch/inventory-optimizer/internal/models"
 	"github.com/noble-ch/inventory-optimizer/internal/reporting"
 	"github.com/noble-ch/inventory-optimizer/internal/store"
 )
@@ -56,6 +57,8 @@ func (s *Server) handleAPIRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.seedTrialSubscription(r.Context(), user)
+
 	tokens, err := s.auth.GenerateTokenPair(user.ID, user.Email)
 	if err != nil {
 		s.sendErrorJSON(w, http.StatusInternalServerError, "Failed to generate tokens")
@@ -100,6 +103,36 @@ func (s *Server) handleAPILogin(w http.ResponseWriter, r *http.Request) {
 	s.sendJSON(w, http.StatusOK, tokens)
 }
 
+func (s *Server) handleAPIMe(w http.ResponseWriter, r *http.Request) {
+	data := map[string]interface{}{
+		"logged_in":         false,
+		"has_auth":          s.hasAuth(),
+		"account_status":    "guest",
+		"free_trial_active": false,
+		"premium_expired":   false,
+		"trial_expires_at":  nil,
+	}
+
+	claims := s.currentUser(r)
+	if claims == nil {
+		s.sendJSON(w, http.StatusOK, data)
+		return
+	}
+
+	state := s.accessStateForUser(r)
+
+	data["logged_in"] = true
+	data["account_status"] = state.AccountStatus
+	data["free_trial_active"] = state.FreeTrialActive
+	data["premium_expired"] = state.PremiumExpired
+	if state.TrialExpiresAt != nil {
+		data["trial_expires_at"] = state.TrialExpiresAt.Format(time.RFC3339)
+	}
+	data["user_email"] = claims.Email
+	data["user_id"] = claims.Subject
+	s.sendJSON(w, http.StatusOK, data)
+}
+
 // ---------------------------------------------------------------------------
 // REST API Handlers — Analyze
 // ---------------------------------------------------------------------------
@@ -141,6 +174,13 @@ func (s *Server) handleAPIAnalyze(w http.ResponseWriter, r *http.Request) {
 		"warnings":      warnings,
 		"elapsed_ms":    elapsed.Milliseconds(),
 		"results":       reports,
+	}
+	if response["warnings"] == nil {
+		response["warnings"] = []string{}
+	}
+	if reports == nil {
+		reports = []models.SKUReport{}
+		response["results"] = reports
 	}
 
 	// If authenticated, optionally save it
@@ -362,6 +402,9 @@ func (s *Server) handleAPISearch(w http.ResponseWriter, r *http.Request) {
 
 	// Reports: use ListReports q param
 	reports, _, _ := s.db.ListReports(r.Context(), claims.Subject, 20, 0, q, "", "")
+	if reports == nil {
+		reports = []store.Report{}
+	}
 
 	// Generated records: load and filter
 	gen, _ := s.db.GetGeneratedRecords(r.Context(), claims.Subject)

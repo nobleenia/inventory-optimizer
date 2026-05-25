@@ -143,11 +143,24 @@ Full API documentation is in [docs/openapi.yaml](docs/openapi.yaml).
 
 ### 4. Docker (full stack)
 
-```bash
-# Run everything (PostgreSQL + web server with auth)
-docker-compose up -d
+Use Docker Compose to start PostgreSQL and the web app together:
 
-# Open http://localhost:8080
+```bash
+docker compose up -d --build
+```
+
+If you only want to rebuild and restart the app service, use:
+
+```bash
+docker compose up -d --build app
+```
+
+Open http://localhost:8080 in your browser.
+
+To stop everything and remove the containers:
+
+```bash
+docker compose down
 ```
 
 Or run just the web server without a database:

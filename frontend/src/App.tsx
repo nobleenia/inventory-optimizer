@@ -741,7 +741,7 @@ function NotFoundPage() {
       actions={(
         <>
           <Link className="button button--primary" to="/">Go home</Link>
-          <Link className="button button--ghost" to="/upload">Run analysis</Link>
+          <Link className="button button--ghost" to="/upload">Run Analysis</Link>
         </>
       )}
     />
@@ -825,7 +825,7 @@ function Header() {
         title: session.premium_expired || session.account_status === 'expired' ? 'Trial expired' : 'Free trial active',
         description: session.premium_expired || session.account_status === 'expired'
           ? 'Your 6-month free access has ended. Subscribe to continue using premium features.'
-          : `Premium features are available until ${session.trial_expires_at ? formatDate(session.trial_expires_at) : 'your trial ends'}.`,
+          : `Your workspace has full access to forecasting, reports, and replenishment tools until ${session.trial_expires_at ? formatDate(session.trial_expires_at) : 'your trial ends'}.`,
       }
     : null;
 
@@ -864,8 +864,8 @@ function Header() {
             <Box size={22} />
           </span>
           <span className="brand__text">
-            <span className="brand__name">Inventory Optimizer</span>
-            <span className="brand__subtext">Data-driven inventory ops</span>
+            <span className="brand__name">StockPilot</span>
+            <span className="brand__subtext">Forecast, replenish, and manage stock with confidence</span>
           </span>
         </Link>
 
@@ -1014,7 +1014,7 @@ function Header() {
             <span>{accessNotice.description}</span>
           </div>
           <Link className="button button--small button--secondary" to="/subscribe">
-            {session.premium_expired || session.account_status === 'expired' ? 'Subscribe now' : 'Review Access'}
+            {session.premium_expired || session.account_status === 'expired' ? 'Subscribe now' : 'Review Subscription'}
           </Link>
         </div>
       )}
@@ -1188,13 +1188,13 @@ function DashboardPage() {
         <h1 className="hero__title">Welcome back.</h1>
         <p className="hero__copy">
           {session.logged_in
-            ? 'Your dashboard is now driven by live backend routes instead of placeholder numbers.'
+            ? 'Your inventory control centre is ready. Track urgent stock risks, review reports, and keep replenishment decisions moving.'
             : 'Sign in to unlock live reports, catalogue edits, Smart Records, and saved analyses.'}
         </p>
         <div className="hero__actions">
           <button className="button button--primary" type="button" onClick={() => navigate('/upload')}>
             <Sparkles size={18} />
-            New Analysis
+            Run New Analysis
           </button>
           {!session.logged_in && (
             <Link className="button button--ghost" to="/login">
@@ -1263,6 +1263,7 @@ function DashboardPage() {
               <div>
                 <p className="eyebrow">Replenishment feed</p>
                 <h2 className="card__title">Stock-up alerts from your latest report</h2>
+                <h2 className="card__title__small">Products that may need attention based on stock levels, reorder points, and projected cost impact.</h2>
               </div>
               <span className={`badge ${replenishmentAlerts.length ? 'badge--amber' : 'badge--teal'}`}>
                 {replenishmentAlerts.length ? `${replenishmentAlerts.length} action item${replenishmentAlerts.length === 1 ? '' : 's'}` : 'All clear'}
@@ -1284,8 +1285,8 @@ function DashboardPage() {
                         <span className="badge badge--amber">Replenish</span>
                       </div>
                       <div className="toolbar" style={{ marginTop: '0.75rem' }}>
-                        <span className="badge badge--stone">Projected annual cost {formatMoney(alert.annualCost)}</span>
-                        <Link className="button button--ghost button--small" to={latestReportDetail.id ? `/reports/${latestReportDetail.id}` : '/reports'}>Open report</Link>
+                        <span className="badge badge--stone">Estimated Annual Holding Cost {formatMoney(alert.annualCost)}</span>
+                        <Link className="button button--ghost button--small" to={latestReportDetail.id ? `/reports/${latestReportDetail.id}` : '/reports'}>View Details</Link>
                       </div>
                     </div>
                   </div>
@@ -1309,10 +1310,10 @@ function DashboardPage() {
             <div className="toolbar">
               <div>
                 <p className="eyebrow">Notification center</p>
-                <h2 className="card__title">Recent replenishment alerts</h2>
+                <h2 className="card__title">Recent stock notifications</h2>
               </div>
               <span className={`badge ${unreadNotifications ? 'badge--amber' : 'badge--teal'}`}>
-                {unreadNotifications ? `${unreadNotifications} unread` : 'All read'}
+                {unreadNotifications ? `${unreadNotifications} unread` : 'Up to date'}
               </span>
             </div>
 
@@ -1340,7 +1341,7 @@ function DashboardPage() {
                 ))}
               </div>
             ) : (
-              <p className="muted">Your notification center is quiet right now. New replenishment alerts will appear here and in email.</p>
+              <p className="muted">No new alerts at the moment. Future replenishment updates, stock risks, and report reminders will appear here.</p>
             )}
           </div>
         </section>
@@ -1587,7 +1588,7 @@ function CataloguePage() {
     } catch (value) {
       const message = (value as Error).message;
       setError(message);
-      pushToast({ title: 'Failed to save SKU', description: message, tone: 'error' });
+      pushToast({ title: 'Failed to add to catalogue', description: message, tone: 'error' });
     } finally {
       setSaving(false);
     }
@@ -1734,8 +1735,8 @@ function CataloguePage() {
       <div className="page__header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
         <div>
           <p className="eyebrow">Catalogue</p>
-          <h1 className="page__title">Premium SKU Catalogue</h1>
-          <p className="page__subtitle">Backed by <span className="badge badge--stone">/api/v1/catalogue/skus</span> and live CRUD actions.</p>
+          <h1 className="page__title">Product Catalogue</h1>
+          <p className="page__subtitle">Manage<span className="badge badge--stone">product records, stock levels, lead times, and replenishment inputs</span> from one central catalogue.</p>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
           <button className="button button--primary" type="button" onClick={async () => {
@@ -1800,7 +1801,7 @@ function CataloguePage() {
         <section className="card">
           <div className="card__head" style={{ position: 'relative', paddingRight: '3rem' }}>
             <h2 className="card__title">Add New SKU</h2>
-            <p className="card__meta">Creates a backend record in the catalogue table.</p>
+            <p className="card__meta">Add a new product to your catalogue with its cost, lead time, selling price, and current stock level.</p>
           </div>
           <div className="card__body">
             <form className="stack" onSubmit={submitSku}>
@@ -1815,7 +1816,7 @@ function CataloguePage() {
                 <Field label="Current Stock"><input className="input" type="number" value={form.current_stock} onChange={(event) => setForm({ ...form, current_stock: event.target.value })} required /></Field>
               </div>
               <button className="button button--primary" type="submit" disabled={saving}>
-                <Plus size={18} /> {saving ? 'Saving...' : 'Save SKU'}
+                <Plus size={18} /> {saving ? 'Saving...' : 'Add to Catalogue'}
               </button>
             </form>
           </div>
@@ -1826,11 +1827,11 @@ function CataloguePage() {
             <div className="toolbar">
               <div>
                 <h2 className="card__title">Your Products</h2>
-                <p className="card__meta">Filtered locally, sourced from the live route.</p>
+                <p className="card__meta">Search, sort, and review the products currently tracked in your inventory catalogue.</p>
               </div>
               <div className="toolbar__group">
                 <div className="field" style={{ minWidth: 240 }}>
-                  <input className="input" placeholder="Search SKUs or filter..." value={search} onChange={(event) => setSearch(event.target.value)} />
+                  <input className="input" placeholder="Search by SKU or product name..." value={search} onChange={(event) => setSearch(event.target.value)} />
                 </div>
                 <div className="field" style={{ minWidth: 160 }}>
                   <select className="select" value={sort} onChange={(event) => setSort(event.target.value)}>
@@ -2044,7 +2045,7 @@ function CataloguePage() {
             <div>
               <p className="eyebrow">Catalogue Analytics</p>
               <h2 className="card__title">ABC / XYZ Matrix</h2>
-              <p className="card__meta">Classify value against demand predictability using live sales history.</p>
+              <p className="card__meta">Understand how each product contributes to revenue, demand stability, and replenishment priority.</p>
             </div>
           </div>
 
@@ -2471,7 +2472,7 @@ function RecordsPage() {
       <div className="page__header">
         <div>
           <p className="eyebrow">Smart Records</p>
-          <h1 className="page__title">Template generator</h1>
+          <h1 className="page__title">Template Generator</h1>
           <p className="page__subtitle">Generate formula-ready Excel sheets from live templates, just like the original records workspace.</p>
         </div>
       </div>
@@ -2719,9 +2720,9 @@ function ReportsPage() {
     <div className="page stack">
       <div className="page__header">
         <div>
-          <p className="eyebrow">My Reports</p>
-          <h1 className="page__title">Saved analyses</h1>
-          <p className="page__subtitle">Report cards, downloads, and the compare flow now come from the backend list route.</p>
+          <p className="eyebrow">Inventory Reports</p>
+          <h1 className="page__title">Saved Analyses, Stock Scenarios</h1>
+          <p className="page__subtitle">Review generated inventory reports, download analysis files, and compare results across different upload periods.</p>
         </div>
       </div>
 
@@ -2757,7 +2758,7 @@ function ReportsPage() {
               </button>
             </div>
             <button className="button button--ghost button--small" type="button" onClick={() => navigate('/upload')}>
-              Run Analysis
+              Generate Inventory Report
             </button>
           </div>
 
@@ -3267,9 +3268,9 @@ function UploadPage() {
       <AnalysisOverlay state={analysisOverlay} onContinue={() => navigate('/dashboard', { replace: true })} />
       <div className="page__header">
         <div>
-          <p className="eyebrow">New analysis</p>
-          <h1 className="page__title">Upload your data</h1>
-          <p className="page__subtitle">This page now posts the real CSV files to <span className="badge badge--stone">/api/v1/analyze</span>.</p>
+          <p className="eyebrow">New Analysis</p>
+          <h1 className="page__title">Upload Your Data</h1>
+          <p className="page__subtitle">Upload your <span className="badge badge--stone">inventory and sales data</span>to generate <span className="badge badge--stone">replenishment insights, reorder alerts, and cost summaries</span>.</p>
           {isGuestMode && <p className="page__subtitle"><span className="badge badge--teal">Guest mode</span> You can analyse without signing in.</p>}
         </div>
       </div>
@@ -3291,7 +3292,7 @@ function UploadPage() {
               </Field>
             </div>
             <button className="button button--primary" type="submit" disabled={busy}>
-              <Upload size={18} /> {busy ? 'Running analysis...' : 'Run analysis'}
+              <Upload size={18} /> {busy ? 'Running analysis...' : 'Run Analysis'}
             </button>
           </form>
         </div>
@@ -3673,6 +3674,7 @@ function SubscriptionPage() {
               <div className="feature-pill">Budget optimization</div>
               <div className="feature-pill">Report compare</div>
             </div>
+            <p className="muted">Premium gives you the tools that save time: keep reports, dig into SKU trends, generate records faster, export your work, and compare results side by side.</p>
             <p className="muted">If your trial expires, these routes are blocked until the subscription is active again.</p>
           </div>
         </article>
@@ -3778,7 +3780,16 @@ function Footer() {
   return (
     <footer className="footer">
       <div className="footer__inner">
-        Inventory Optimizer · React frontend wired to live backend routes.
+        <div className="footer__brand">
+          <strong>StockPilot</strong>
+          <span>Inventory forecasting, replenishment alerts, and SKU-level reporting.</span>
+        </div>
+
+        <div className="footer__meta">
+          <span>© 2026</span>
+          <span>Trial workspace</span>
+          <span>v1.0</span>
+        </div>
       </div>
     </footer>
   );

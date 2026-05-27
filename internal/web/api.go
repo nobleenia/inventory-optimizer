@@ -11,6 +11,7 @@ import (
 
 	"github.com/noble-ch/inventory-optimizer/internal/auth"
 	"github.com/noble-ch/inventory-optimizer/internal/engine"
+	"github.com/noble-ch/inventory-optimizer/internal/models"
 	"github.com/noble-ch/inventory-optimizer/internal/reporting"
 	"github.com/noble-ch/inventory-optimizer/internal/store"
 )
@@ -36,8 +37,11 @@ func (s *Server) handleAPIRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
+		Email             string `json:"email"`
+		Password          string `json:"password"`
+		PreferredCurrency string `json:"preferred_currency"`
+		CountryCode       string `json:"country_code"`
+		BusinessType      string `json:"business_type"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		s.sendErrorJSON(w, http.StatusBadRequest, "Invalid JSON body")
@@ -45,16 +49,26 @@ func (s *Server) handleAPIRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	req.Email = strings.TrimSpace(strings.ToLower(req.Email))
 	if req.Email == "" || len(req.Password) < 8 {
 		s.sendErrorJSON(w, http.StatusBadRequest, "Email required and password must be >= 8 chars")
 		return
 	}
+	req.PreferredCurrency = strings.ToUpper(strings.TrimSpace(req.PreferredCurrency))
+	req.CountryCode = strings.ToUpper(strings.TrimSpace(req.CountryCode))
+	req.BusinessType = strings.ToLower(strings.TrimSpace(req.BusinessType))
+	if len(req.PreferredCurrency) < 3 || len(req.CountryCode) != 2 || req.BusinessType == "" {
+		s.sendErrorJSON(w, http.StatusBadRequest, "Currency, country, and business type are required")
+		return
+	}
 
-	user, err := s.db.CreateUser(r.Context(), req.Email, req.Password)
+	user, err := s.db.CreateUser(r.Context(), req.Email, req.Password, req.PreferredCurrency, req.CountryCode, req.BusinessType)
 	if err != nil {
 		s.sendErrorJSON(w, http.StatusConflict, "Email already exists or registration failed")
 		return
 	}
+
+	s.seedTrialSubscription(r.Context(), user)
 
 	tokens, err := s.auth.GenerateTokenPair(user.ID, user.Email)
 	if err != nil {
@@ -100,6 +114,43 @@ func (s *Server) handleAPILogin(w http.ResponseWriter, r *http.Request) {
 	s.sendJSON(w, http.StatusOK, tokens)
 }
 
+func (s *Server) handleAPIMe(w http.ResponseWriter, r *http.Request) {
+	data := map[string]interface{}{
+		"logged_in":         false,
+		"has_auth":          s.hasAuth(),
+		"account_status":    "guest",
+		"free_trial_active": false,
+		"premium_expired":   false,
+		"trial_expires_at":  nil,
+	}
+
+	claims := s.currentUser(r)
+	if claims == nil {
+		s.sendJSON(w, http.StatusOK, data)
+		return
+	}
+	if s.db != nil {
+		if user, err := s.db.GetUserByID(r.Context(), claims.Subject); err == nil && user != nil {
+			data["preferred_currency"] = user.PreferredCurrency
+			data["country_code"] = user.CountryCode
+			data["business_type"] = user.BusinessType
+		}
+	}
+
+	state := s.accessStateForUser(r)
+
+	data["logged_in"] = true
+	data["account_status"] = state.AccountStatus
+	data["free_trial_active"] = state.FreeTrialActive
+	data["premium_expired"] = state.PremiumExpired
+	if state.TrialExpiresAt != nil {
+		data["trial_expires_at"] = state.TrialExpiresAt.Format(time.RFC3339)
+	}
+	data["user_email"] = claims.Email
+	data["user_id"] = claims.Subject
+	s.sendJSON(w, http.StatusOK, data)
+}
+
 // ---------------------------------------------------------------------------
 // REST API Handlers — Analyze
 // ---------------------------------------------------------------------------
@@ -142,6 +193,13 @@ func (s *Server) handleAPIAnalyze(w http.ResponseWriter, r *http.Request) {
 		"elapsed_ms":    elapsed.Milliseconds(),
 		"results":       reports,
 	}
+	if response["warnings"] == nil {
+		response["warnings"] = []string{}
+	}
+	if reports == nil {
+		reports = []models.SKUReport{}
+		response["results"] = reports
+	}
 
 	// If authenticated, optionally save it
 	claims := s.currentUser(r)
@@ -164,6 +222,7 @@ func (s *Server) handleAPIAnalyze(w http.ResponseWriter, r *http.Request) {
 
 		if err := s.db.CreateReport(r.Context(), dbReport); err == nil {
 			response["saved_report_id"] = dbReport.ID
+			_ = s.enqueueReplenishmentNotifications(r.Context(), claims.Subject, dbReport.ID, reports)
 		}
 	} else if claims == nil {
 		// Truncate for guests in API too to mirror web.
@@ -362,6 +421,9 @@ func (s *Server) handleAPISearch(w http.ResponseWriter, r *http.Request) {
 
 	// Reports: use ListReports q param
 	reports, _, _ := s.db.ListReports(r.Context(), claims.Subject, 20, 0, q, "", "")
+	if reports == nil {
+		reports = []store.Report{}
+	}
 
 	// Generated records: load and filter
 	gen, _ := s.db.GetGeneratedRecords(r.Context(), claims.Subject)

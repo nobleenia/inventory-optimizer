@@ -19,6 +19,14 @@ UI.showToast = function(message, type='info', timeout=4000){
 
 UI.debounce = function(fn, ms){ let t; return function(){ clearTimeout(t); t = setTimeout(()=>fn.apply(this, arguments), ms) }}
 
+UI.toggleHeaderNav = function(button){
+    const nav = document.querySelector('.header-nav');
+    if(!nav || !button) return;
+    const isOpen = nav.classList.toggle('nav-open');
+    button.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    button.textContent = isOpen ? '✕' : '☰';
+}
+
 // Global search dropdown
 UI.initGlobalSearch = function(inputId, dropdownId){
     const input = document.getElementById(inputId);

@@ -138,7 +138,7 @@ func runAPI(port string) {
 
 func runWeb(port string) {
 	// Try to connect to database for auth + saved reports.
-	// If DATABASE_URL is not set or connection fails, run in guest-only mode.
+	// If DATABASE_URL is not set, run in guest-only mode.
 	var db *store.DB
 	var authSvc *auth.Service
 	var err error
@@ -153,8 +153,7 @@ func runWeb(port string) {
 
 		db, err = connectStoreWithRetry(dsn, "web")
 		if err != nil {
-			log.Printf("Database connection failed: %v", err)
-			log.Println("Starting web server in guest-only mode (no auth, no saved reports).")
+			log.Fatalf("Database connection failed for web mode: %v", err)
 		} else {
 			authSvc = auth.NewService(auth.WebConfig(jwtSecret))
 			log.Println("Database connected — auth and saved reports enabled.")

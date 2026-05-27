@@ -21,6 +21,8 @@ go.work
 .vscode/
 *.swp
 *.swo
+*.orig
+*.rej
 
 # OS
 .DS_Store

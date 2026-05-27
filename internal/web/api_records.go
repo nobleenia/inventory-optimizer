@@ -27,16 +27,7 @@ func (s *Server) HandleGetTemplates(w http.ResponseWriter, r *http.Request) {
 
 // handleRecordsPage renders the Smart Records UI for premium users.
 func (s *Server) handleRecordsPage(w http.ResponseWriter, r *http.Request) {
-	claims := s.currentUser(r)
-	if claims == nil {
-		http.Redirect(w, r, "/login?redirect=/records", http.StatusSeeOther)
-		return
-	}
-
-	d := s.baseData(r)
-	if err := s.tmpl.ExecuteTemplate(w, "records.html", d); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	s.serveApp(w)
 }
 
 type generateRequest struct {

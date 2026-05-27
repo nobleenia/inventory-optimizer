@@ -3787,7 +3787,7 @@ function Footer() {
 
         <div className="footer__meta">
           <span>© 2026</span>
-          <span>Trial workspace</span>
+          <span>Workspace</span>
           <span>v1.0</span>
         </div>
       </div>
